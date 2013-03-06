@@ -1,0 +1,124 @@
+#!/bin/sh -e
+# ©2007,2008 isagn inc., all rights reserved. www.isagn.com
+# $Id: pp-start-samplers,v 1.30 2008/02/06 20:12:45 rcgood Exp $  #%^)
+
+Pname="`exec basename $0`"
+Usage="Usage: $Pname [-n] [-x] [-rawDataDir <rawDataDir>] [-outputDir <outputDir>] [-configDir <configDir>] [ <remHost> | -all ]"
+
+eval `pp-config`
+
+FakeIt='0'
+EarlyExit='0'
+
+remAccess=''
+
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+	-remAccess)  remaccess="$2" ; shift 2 ;;
+	-rawDataDir) rawDataDir="$2" ; shift 2 ;;
+	-outputDir)  outputDir="$2"  ; shift 2 ;;
+	-configDir)  configDir="$2"  ; shift 2 ;;
+	-n)          FakeIt='1'      ; shift   ;;
+	-x)          EarlyExit='1'   ; shift   ;;
+
+	*) break;;
+    esac
+done
+
+
+remHost="$1"
+
+if [ -z "$remHost" ]; then
+	echo " !! $Usage" 1>&2
+	exit 1
+fi
+
+
+
+
+doInit() {
+	mkdir -p $rawDataDir/$remHost $outputDir/$remHost/plots-live
+
+	if [ ! -f $outputDir/$remHost/plots-live/$remHost.gif -a -f warming-up.gif ]; then
+		ln warming-up.gif $outputDir/$remHost/plots-live/$remHost.gif
+	fi
+
+	if [ "$remAccess" != '' ]; then remAccess="$remAccess exec"; fi
+
+
+	if [ $FakeIt = '0' ]; then
+		# Stop all samplers.
+		$remAccess pp-reaper
+	elif [ $FakeIt = '1' ]; then
+		# Show running samplers.
+		$remAccess pp-reaper -n
+	fi
+
+	perl -e 'select undef, undef, undef, 0.25'
+}
+
+startSampler() {
+	rawFile="$1"
+	shift
+
+	if [ -z "$*" ]; then
+		cmd="pp-sample-$rawFile"
+	else
+		cmd="$*"
+	fi
+
+	if [ $EarlyExit = '0' ]; then
+		if [ $FakeIt = '0' ]; then
+			$remAccess $cmd < /dev/null >> $rawDataDir/$remHost/$rawFile &
+			echo " %% $remAccess $cmd < /dev/null >> $rawDataDir/$remHost/$rawFile &"
+		elif [ $FakeIt = '1' ]; then
+			echo " #% $remAccess $cmd < /dev/null >> $rawDataDir/$remHost/$rawFile &"
+		fi
+	fi
+
+	perl -e 'select undef, undef, undef, 0.1'
+}
+
+
+startXSampler() {
+	demux="$1"
+	shift
+
+	if [ -z "$*" ]; then
+		cmd="pp-sample-$demux"
+	else
+		cmd="$*"
+	fi
+
+	if [ $EarlyExit = '0' ]; then
+		if [ $FakeIt = '0' ]; then
+			($remAccess $cmd < /dev/null | pp-recv-$demux $rawDataDir/$remHost ) 2>&1 | sed -e "s/^/$remHost: /"  &
+			echo " %% ($remAccess $cmd < /dev/null | pp-recv-$demux $rawDataDir/$remHost ) &"
+		elif [ $FakeIt = '1' ]; then
+			echo " #% ($remAccess $cmd < /dev/null | pp-recv-$demux $rawDataDir/$remHost ) &"
+		fi
+	fi
+
+	perl -e 'select undef, undef, undef, 0.1'
+}
+
+
+
+echo " -- $Pname: remHost: '$remHost'"
+
+if [ "$remHost" = '-all' ]; then
+	hostList="`cd $configDir && ls */samplerConfig | sed -e 's/\/.*$//'`"
+	echo " -- $Pname: hostList: '$hostList'"
+	for host in $hostList; do
+		remHost="$host"
+		. $configDir/$remHost/samplerConfig
+	done
+elif [ -f $configDir/$remHost/samplerConfig ]; then
+	. $configDir/$remHost/samplerConfig
+else
+	echo " !! $Pname: No sampler config found at '$configDir/$remHost/samplerConfig'" 1>&2
+fi
+
+
+exit

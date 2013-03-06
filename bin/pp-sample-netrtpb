@@ -1,0 +1,55 @@
+#!/usr/bin/perl -w
+# ©2007 isagn inc., all rights reserved. www.isagn.com
+# $Id: pp-sample-netrtpb,v 1.4 2007/12/21 16:46:00 rcgood Exp $  #%^)
+
+(my $Pname = $0) =~ s+^.*/++;
+my $Usage = "Usage: $Pname [<target netwk iface>]";
+
+use FileHandle;
+
+my ($target) = @ARGV;
+$target = 'eth0'  unless defined $target;
+
+my $delay = 9;
+
+
+$| = 1;
+
+print "\n";
+
+for(;;) {
+
+	my $str = `/sbin/ifconfig $target`;
+
+	my @l = split /\n+/, $str;
+
+	my ($rp, $tp, $rb, $tb);
+
+	while(@l) {
+		my $l = shift @l;
+		
+		# eth0      Link encap:Ethernet  HWaddr 00:00:00:00:00:00  
+		#           inet addr:12.123.1.12  Bcast:12.123.255.255  Mask:255.255.255.0
+		#           UP BROADCAST RUNNING MULTICAST  MTU:1500  Metric:1
+		#           RX packets:235961984 errors:0 dropped:0 overruns:0 frame:0
+		#           TX packets:3886316790 errors:0 dropped:0 overruns:0 carrier:0
+		#           collisions:0 txqueuelen:1000 
+		#           RX bytes:3814940402 (3.5 GiB)  TX bytes:3712933569 (3.4 GiB)
+		#           Interrupt:201 
+
+
+		if(!defined $rp && $l =~ /RX packets:(\d+)/) { $rp = $1 }
+		if(!defined $tp && $l =~ /TX packets:(\d+)/) { $tp = $1 }
+		if(!defined $rb && $l =~ /RX bytes:(\d+)/)   { $rb = $1 }
+		if(!defined $tb && $l =~ /TX bytes:(\d+)/)   { $tb = $1 }
+		else { next }
+	}
+
+	map { $_ = 0 unless defined $_ } ($rp, $tp, $rb, $tb);
+
+	printf "%d  %.0f %.0f %.0f %.0f\n", time, $rp, $tp, $rb, $tb;
+
+	sleep $delay;
+}
+
+exit 0;

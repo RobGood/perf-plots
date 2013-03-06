@@ -1,0 +1,22 @@
+#!/bin/sh -e
+# ©2007 isagn inc., all rights reserved. www.isagn.com
+# $Id: pp-make-day-plots,v 1.14 2007/11/30 18:15:39 rcgood Exp $  #%^)
+
+Pname="`exec basename $0`"
+Usage="Usage: $Pname <host> ..."
+
+eval `pp-config`
+
+dateList="
+2007-11-30
+"
+
+for hostName in $*; do
+	for date in $dateList; do
+		echo " -- $Pname: Making day plots: $hostName $date"
+		echo "pp-make-plots -remHost $hostName -rawDataDir $rawDataDir -outputDir $outputDir -configDir $configDir  $date"
+		      pp-make-plots -remHost $hostName -rawDataDir $rawDataDir -outputDir $outputDir -configDir $configDir  $date
+	done
+done
+
+exit

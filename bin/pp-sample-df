@@ -1,0 +1,51 @@
+#!/usr/bin/perl -w
+# ©2007 isagn inc., all rights reserved. www.isagn.com
+# $Id: pp-sample-df,v 1.9 2007/11/20 17:21:24 rcgood Exp $  #%^)
+
+(my $Pname = $0) =~ s+^.*/++;
+my $Usage = "Usage: $Pname [<target fsys>]";
+
+use FileHandle;
+
+my ($target) = @ARGV;
+$target = ''  unless defined $target;
+
+my $delay = 5;
+
+
+my $cmd = "df -P $target";
+
+$| = 1;
+
+print "\n";
+
+for(;;) {
+	# % df  -P /
+	# Filesystem         1024-blocks      Used Available Capacity Mounted on
+	# /dev/sda0              0000000    000000   0000000      00% /
+	# 0                      1          2        3            4   5
+
+	my $ttlAvail = 0;
+	my $ttlUsed  = 0;
+
+	my $fh  = new FileHandle("$cmd |");
+
+	while(<$fh>) {
+		next if /^Filesystem /;
+
+		if(!$target) { next unless m~^/dev/~ && !m~/dev/loop~ }
+
+		my @s = split /\s+/;
+		$ttlAvail += $s[1];
+		$ttlUsed  += $s[2];
+	}
+
+	close $fh;
+
+
+	printf "%d  %s\n", time, $ttlUsed/$ttlAvail;
+
+	sleep $delay;
+}
+
+exit 0;

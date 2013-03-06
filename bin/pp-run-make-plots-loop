@@ -1,0 +1,307 @@
+#!/usr/bin/perl -w
+# ©2007,2008 isagn inc., all rights reserved. www.isagn.com
+# $Id: pp-run-make-plots-loop,v 1.3 2008/11/07 19:40:55 xtext Exp $  #%^)
+
+(my $Pname = $0) =~ s+^.*/++;
+my $Usage = "Usage: $Pname <remHost> [<liveReloadTime> [<liveHoursBack>]]";
+
+use FileHandle;
+
+my $rawDataDir = 'raw-data';
+my $configDir  = '.';
+my $outputDir  = '.';
+
+map { eval "\$$_" } split /\n+/, `pp-config`;
+
+
+my ($remHost, $liveReloadTime, $liveHoursBack) = @ARGV;;
+die " !! $Usage\n"  unless defined $remHost;
+
+
+
+#------------------------------------------
+my $LiveImagePeriod      =  14;
+
+  my $LiveHoursBack = 1.50;
+# my $LiveHoursBack = 0.75;
+# my $LiveHoursBack = 0.25;
+# my $LiveHoursBack = 0.05;
+# my $LiveHoursBack = '';
+
+if(defined $liveReloadTime) { $LiveImagePeriod = $liveReloadTime }
+if(defined $liveHoursBack)  { $LiveHoursBack   = $liveHoursBack  }
+
+my $LiveImageIsIdle      =  1;
+my $LiveImageIdlePeriod  = int( 4.5 * $LiveImagePeriod + 0.5);
+
+my $DayUpdatePeriod      = 20 *   60;
+my $RawDataBackupPeriod  =  6 * 3600;
+my $OverviewUpdatePeriod =  4 * 3600;
+
+
+
+my $lastLiveImageGenTime  = $^T - $LiveImagePeriod;
+my $lastDayUpdate         = $^T;
+my $lastOverviewUpdate    = $^T;
+my $lastRawDataBackup     = $^T;
+
+
+
+
+
+
+#------------------------------------------
+
+
+setpriority(0, 0, 5);
+
+$SIG{CHLD} = sub { wait };
+
+
+#-----------------------------------------------------------------------------------------------------------
+
+
+my $lastImageFetchTime;
+
+sub
+foregroundLiveUpdate {
+	my ($now, $n) = @_;
+
+	# Track the access time of the live plot image.
+	# Don't bother generating it if no one's looking at it.
+	# But do generate it if so...
+
+	my $pDir = 'plots-live';
+	$pDir = "$outputDir/$remHost/$pDir"  if defined $remHost && -d "$outputDir/$remHost";
+
+	my $liveImageFile = eval { my @s = glob "$pDir/*.gif";   shift @s };
+	my $liveHTMLFile  = eval { my @s = glob "$pDir/*.html";  shift @s };
+
+	if(! -s $liveImageFile) {
+		unlink $liveImageFile;
+		undef $liveImageFile;
+	}
+
+	$lastImageFetchTime = (stat $liveImageFile)[8]	 # access time.
+		if defined $liveImageFile;
+
+	if(! defined $lastImageFetchTime || $lastImageFetchTime + $LiveImageIdlePeriod > $now) {
+
+		# The image was fetched recently enough, so maybe we'll make a new one...
+
+		if($LiveImageIsIdle) {
+			my $msg = sprintf "Last %s live image fetch %d s ago; starting live image production at %s.",
+					 $remHost, $now - $lastImageFetchTime, scalar(localtime($now));
+
+			print STDERR " ** $Pname: $msg\n";
+			$LiveImageIsIdle = 0;
+		}
+		else {
+			# my $msg = sprintf "Last %s live image fetch %d s ago at %s.",
+			#		$remHost, $lastImageFetchAgo, scalar(localtime($now)));
+			# print STDERR " ** $Pname: $msg\n";
+		}
+
+		if($lastLiveImageGenTime + $LiveImagePeriod <= $now) {
+
+			# The image was generated long enough ago that we can make a new one.
+
+			my $msg = sprintf "     Updating $remHost (%d) live plot at %s", $n, scalar(localtime($now));
+
+			my $cmd = 'pp-make-plots ' . join(' ', (
+				"-rawDataDir $rawDataDir",
+				"-configDir $configDir",
+				"-outputDir $outputDir",
+
+				"-remHost   $remHost",
+				"-reload    $LiveImagePeriod",
+
+				"-hoursBack $LiveHoursBack",
+
+			));
+
+			print  STDERR " ** $Pname: $msg\n";
+			# print  STDERR " >% $Pname: $cmd\n";
+			system $cmd;
+			printf STDERR " ** $Pname: Done updating $remHost (%d) live plot at %s.\n", $n, scalar(localtime(time));;
+
+			$lastLiveImageGenTime = time;
+		}
+	}
+	else {
+
+		# The image was fetched long enough ago that we can stop making new images.
+
+		unless($LiveImageIsIdle) {
+
+			if(defined $lastImageFetchTime) {
+				my $msg = sprintf "Last %s live image fetch %s s ago; stopping live image production at %s.",
+					$remHost, $now - $lastImageFetchTime, scalar(localtime($now));
+
+				print STDERR " ** $Pname: $msg\n";
+			}
+
+			$LiveImageIsIdle = 1;
+
+			if(-f "$outputDir/warming-up.gif" && defined $liveImageFile) {
+				system "cp -f $outputDir/warming-up.gif $liveImageFile.$$";
+				utime $lastImageFetchTime, $now, "$liveImageFile.$$";
+				rename "$liveImageFile.$$", "$liveImageFile";
+			}
+
+			# If we're warming up, rewrite the HTML to reload frequently so the browser shows the new plot prmptly.
+			if(defined $liveHTMLFile) {
+				my $ifh = new FileHandle("< $liveHTMLFile");
+				my $ofh = new FileHandle("> $liveHTMLFile.$$");
+
+				while(<$ifh>) {
+					s/<meta http-equiv="refresh" content="(\d+);/<meta http-equiv="refresh" content="1;/;
+
+					print $ofh $_;
+				}
+
+				close $ifh;
+				close $ofh;
+
+				rename "$liveHTMLFile.$$", $liveHTMLFile;
+			}
+		}
+	}
+
+	return;
+}
+
+
+sub
+backgroundDayUpdate {
+	return if fork;
+
+	my ($now) = @_;
+
+	my $msg = "     Updating $remHost day plot (in background) at " . scalar localtime $now;
+	print STDERR " ** $Pname: $msg\n";
+
+	my $cmd = 'pp-make-plots ' . join(' ', (
+		"-rawDataDir $rawDataDir",
+		"-configDir $configDir",
+		"-outputDir $outputDir",
+
+		"-remHost   $remHost",
+		"-today",
+	));
+
+	system $cmd;
+
+	$msg = "Done updating $remHost day plot at " . scalar localtime time;
+	print STDERR " ** $Pname: $msg\n";
+
+	exit 0;
+}
+
+
+sub
+backgroundOverviewUpdate {
+	return if fork;
+
+	my ($now) = @_;
+
+	my $msg = "     Updating $remHost overview plot (in background) at " . scalar localtime $now;
+	print STDERR " ** $Pname: $msg\n";
+
+	system "pp-gen-overview $remHost";
+
+
+	$msg = "Done updating $remHost overview plot at " . scalar localtime time;
+	print STDERR " ** $Pname: $msg\n";
+
+	exit 0;
+}
+
+
+sub
+backgroundBackup {
+	return if fork;
+
+	my ($now) = @_;
+
+	setpriority(0, 0, 15);
+
+	my $msg = "     Making $remHost backup (in background) of raw data at " . scalar localtime $now;
+	print STDERR " ** $Pname: $msg\n";
+
+	my $cdate = sprintf "%010d", $now;
+	# symlink 'raw-data', "raw-data-$cdate";
+
+	my $cmd = "(tar cf - raw-data/$remHost/. 2>/dev/null) | gzip > raw-data/$remHost-$cdate.tar.gz";
+	# print STDERR " %> $Pname: $cmd\n";
+	system $cmd;
+
+	# unlink "raw-data-$cdate";
+
+	my @backupList = sort glob "raw-data/$remHost-*.tar.gz";
+
+	while(@backupList > 3) {
+		my $file = shift @backupList;
+		unlink $file;
+	}
+
+	$msg = "Done making $remHost backup at " . scalar localtime time;
+	print STDERR " ** $Pname: $msg\n";
+
+	exit 0;
+}
+
+
+#-----------------------------------------------------------------------------------------------------------
+
+sub
+randomise {
+	my ($base, $min, $max) = @_;
+
+	my $r = rand;
+
+	$r = $r * ($max - $min) + $min;
+
+	return $r * $base;
+}
+
+
+my $DayUpdatePeriod0      = randomise($DayUpdatePeriod,      0.75, 2.5);
+my $OverviewUpdatePeriod0 = randomise($OverviewUpdatePeriod, 0.75, 2.5);
+my $RawDataBackupPeriod0  = randomise($RawDataBackupPeriod,  0.50, 4.0);
+
+for(my $n=1; ; ++$n) {
+	my $now = time;
+	# print STDERR " -- $Pname: now: $now\n";
+
+
+	foregroundLiveUpdate $now, $n;
+
+	if($lastDayUpdate + $DayUpdatePeriod0 < $now) {
+		backgroundDayUpdate $now;
+		$lastDayUpdate = $now;
+		$DayUpdatePeriod0      = randomise($DayUpdatePeriod,      0.75, 2.5);
+	}
+
+	if($lastOverviewUpdate + $OverviewUpdatePeriod0 < $now) {
+		backgroundOverviewUpdate $now;
+		$lastOverviewUpdate = $now;
+
+		$OverviewUpdatePeriod0 = randomise($OverviewUpdatePeriod, 0.75, 2.5);
+	}
+
+
+	if(0 && $lastRawDataBackup + $RawDataBackupPeriod0 < $now) {
+		backgroundBackup $now;
+		$lastRawDataBackup = $now;
+
+		$RawDataBackupPeriod0  = randomise($RawDataBackupPeriod, 0.5, 4.0);
+	}
+
+
+	select undef, undef, undef, 0.6;
+}
+
+#-----------------------------------------------------------------------------------------------------------
+
+exit 0;

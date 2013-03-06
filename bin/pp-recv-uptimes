@@ -1,0 +1,49 @@
+#!/usr/bin/perl -w
+# ©2007 isagn inc., all rights reserved. www.isagn.com
+# $Id: pp-recv-uptimes,v 1.1 2007/11/19 20:16:20 rcgood Exp $  #%^)
+
+(my $Pname = $0) =~ s+^.*/++;
+my $Usage = "Usage: $Pname <dir>";
+
+my ($dir) = @ARGV;
+$dir = '.'  unless defined $dir;
+
+
+use FileHandle;
+
+my $utfh = new FileHandle(">> $dir/upTime");
+my $ctfh = new FileHandle(">> $dir/cpuTime");
+
+die " !! $Pname: Can't open upTime: $!\n"  unless defined $utfh;
+die " !! $Pname: Can't open cpuTime: $!\n"  unless defined $ctfh;
+
+
+$utfh->autoflush(1);
+$ctfh->autoflush(1);
+
+while(<STDIN>) {
+	chomp;
+	if($_ eq '') {
+		print $utfh "\n";
+		print $ctfh "\n";
+		next;
+	}
+
+	# my ($t, $ut, $it) = split /\s+/, $_;
+	# my $ct = $ut - $it;
+
+
+    # $idleTime is wrong on SMP kernel up to 2.6.26,
+    # so we have to get idle time some other way.
+
+	my ($t, $ut, $it, $it2) = split /\s+/, $_;
+	my $ct = $ut - ($it2? $it2: $it);
+
+	printf $utfh "%s %s\n", $t, $ut;
+	printf $ctfh "%s %s\n", $t, $ct;
+}
+
+close $utfh;
+close $ctfh;
+
+exit 0;

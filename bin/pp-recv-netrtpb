@@ -1,0 +1,53 @@
+#!/usr/bin/perl -w
+# ©2007 isagn inc., all rights reserved. www.isagn.com
+# $Id: pp-recv-netrtpb,v 1.8 2007/11/14 21:07:35 rcgood Exp $  #%^)
+
+(my $Pname = $0) =~ s+^.*/++;
+my $Usage = "Usage: $Pname <dir>";
+
+my ($dir) = @ARGV;
+$dir = '.'  unless defined $dir;
+
+
+use FileHandle;
+
+my $rpfh = new FileHandle(">> $dir/net-rp");
+my $tpfh = new FileHandle(">> $dir/net-tp");
+my $rbfh = new FileHandle(">> $dir/net-rb");
+my $tbfh = new FileHandle(">> $dir/net-tb");
+
+die " !! $Pname: Can't open net-rp: $!\n"  unless defined $rpfh;
+die " !! $Pname: Can't open net-tp: $!\n"  unless defined $tpfh;
+die " !! $Pname: Can't open net-rb: $!\n"  unless defined $rbfh;
+die " !! $Pname: Can't open net-tb: $!\n"  unless defined $tbfh;
+
+
+$rpfh->autoflush(1);
+$tpfh->autoflush(1);
+$rbfh->autoflush(1);
+$tbfh->autoflush(1);
+
+while(<STDIN>) {
+	chomp;
+	if($_ eq '') {
+		print $rpfh "\n";
+		print $tpfh "\n";
+		print $rbfh "\n";
+		print $tbfh "\n";
+		next;
+	}
+
+	my ($t, $rp, $tp, $rb, $tb) = split /\s+/, $_;
+
+	printf $rpfh "%s %s\n", $t, $rp;
+	printf $tpfh "%s %s\n", $t, $tp;
+	printf $rbfh "%s %f\n", $t, $rb/1024;
+	printf $tbfh "%s %f\n", $t, $tb/1024;
+}
+
+close $rpfh;
+close $tpfh;
+close $rbfh;
+close $tbfh;
+
+exit 0;

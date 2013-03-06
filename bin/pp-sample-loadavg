@@ -1,0 +1,35 @@
+#!/usr/bin/perl -w
+# ©2007 isagn inc., all rights reserved. www.isagn.com
+# $Id: pp-sample-loadavg,v 1.3 2007/11/14 19:36:14 rcgood Exp $  #%^)
+
+(my $Pname = $0) =~ s+^.*/++;
+my $Usage = "Usage: $Pname";
+
+use FileHandle;
+
+my $delay = 6;
+
+$| = 1;
+
+print "\n";
+
+for(;;) {
+	# % cat /proc/loadavg
+	# 4.72 5.44 5.41 7/2423 13872
+	# 0    1    2    3      4
+
+	my $fh = new FileHandle("< /proc/loadavg");
+	my $str = <$fh>;
+	close  $fh;
+
+	my @s = split /\s+/, $str;
+
+
+	my $oneMinLA = $s[0];
+
+	printf "%d  %.2f\n", time, $oneMinLA;
+
+	sleep $delay;
+}
+
+exit 0;

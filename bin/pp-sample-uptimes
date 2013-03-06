@@ -1,0 +1,75 @@
+#!/usr/bin/perl -w
+# ©2007 isagn inc., all rights reserved. www.isagn.com
+# $Id: pp-sample-uptimes,v 1.2 2007/11/19 20:16:21 rcgood Exp $  #%^)
+
+(my $Pname = $0) =~ s+^.*/++;
+my $Usage = "Usage: $Pname [<target intr src>]";
+
+use FileHandle;
+
+my ($target) = @ARGV;
+$target = 'eth0'  unless defined $target;
+
+my $delay = 5;
+
+
+$| = 1;
+
+print "\n";
+
+for(;;) {
+
+	my $str;
+
+	my $fh = new FileHandle("< /proc/uptime");
+	my $line = <$fh>;
+	close $fh;
+
+
+	my ($upTime, $idleTime) = split /\s+/, $line;
+
+	# printf "%d  %f %f\n", time, $upTime, $idleTime;
+ 	#
+ 	# sleep $delay;
+
+
+
+	# $idleTime is wrong on SMP kernel up to 2.6.26,
+	# so we have to get idle time some other way.
+
+	$fh = new FileHandle("< /proc/stat");
+	
+	my ($name, $userTime, $niceTime, $sysTime, $idleTime2, $iowait, $irq, $softirq, $stolen, $misc);
+
+	$idleTime2 = 0;
+
+	my $ttlIdleTime = 0;
+	my $ncpu        = 0;
+
+	while(<$fh>) {
+
+		# cpu  598993 137041 907135 259731788 134242 5734 62851 0 0
+		# cpu0 358822 117321 473229 129189233  97427 4082 56554 0 0
+		# cpu1 240171  19720 433905 130542555  36815 1651  6297 0 0
+
+		next unless /^cpu\d+\s/;
+
+		($name, $userTime, $niceTime, $sysTime, $idleTime2, $iowait, $irq, $softirq, $stolen, $misc) = split;
+
+		++$ncpu;
+		$ttlIdleTime += $idleTime2;
+		
+	}
+	close $fh;
+
+	if(defined $idleTime2) { $ttlIdleTime /= $ncpu   }
+
+	$ttlIdleTime /= 100;  # Should be value of USER_HZ
+
+
+	printf "%d  %f %f %f\n", time, $upTime, $idleTime, $ttlIdleTime;
+
+	sleep $delay;
+}
+
+exit 0;

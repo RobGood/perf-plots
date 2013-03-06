@@ -1,0 +1,26 @@
+# ©2007 isagn inc., all rights reserved. www.isagn.com
+
+# $MinutesPerTic_Live = 1;
+
+map { $useLogScale{$_} = 1 } qw ( upTime );
+
+genDatAndDeriv 'loadavg',          [          000,    -2, 'x202020',    0 ],   [ 200_000,     4, 'xf08080',  1200 ];
+genDatAndDeriv 'pid',              [        5_000,     1, 'xc0c060',  1100 ],   [     100,     0, 'x202020',    10 ];
+genDatAndDeriv 'df',               [  10_000 * 1e6,     0, 'x20e020',  1000 ],   [     1e6,     0, 'xa02020',   999 ];
+genDatAndDeriv 'nprocs',           [         1e5,   8, 'xa0a060',  1120 ],   [    1e4,   0, 'x206020',    12 ];
+
+genDatAndDeriv 'intr-ide0',        [    250,   5.00, 'x20ff40',   200 ],   [    1e-3,     0, 'x202020',     0 ];
+genDatAndDeriv 'intr-eth0',        [      50,   3.10, 'x20ff40',   200 ],   [    1e-4,     0, 'x202020',     0 ];
+
+genDatAndDeriv 'upTime',           [         0,     0, 'x202020',     0 ],   [  1e6,  -log(86400)/log(10), 'x8020a0',  1999 ];
+genDatAndDeriv 'cpuTime',          [       1e6,     0, 'x20e0c0',  1000 ],   [  1,                      0, 'xa02020',   000 ];
+
+genDatAndDeriv 'memUsed',           [        5e7,     9.00, 'x20f020',  1000 ],   [  1e6,            9.00, 'x8020a0',  1999 ];
+genDatAndDeriv 'swapUsed',          [       1e9,    10.00, 'x20e0c0',  1000 ],   [  1e6,           10.00, 'xa02020',  1999 ];
+
+genDatAndDeriv 'net-rp',           [      50,   3.05, 'xf0c0c0',   201 ],   [    1e-3,     0, 'x202020',     0 ];
+genDatAndDeriv 'net-tp',           [      50,      3, 'x40a0c0',   202 ],   [    1e-3,     0, 'x202020',     0 ];
+genDatAndDeriv 'net-rb',           [      30,      6, 'x60c0a0',   210 ],   [ 2500/1048576,     6, 'x602020',     1 ];
+genDatAndDeriv 'net-tb',           [      30,      7, 'x60a0a0',   210 ],   [ 2500/1048576,     7, 'x602020',     1 ];
+
+1;

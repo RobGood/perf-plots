@@ -1,0 +1,41 @@
+#!/usr/bin/perl -w
+# ©2007 isagn inc., all rights reserved. www.isagn.com
+# $Id: pp-recv-meminfo,v 1.2 2007/11/19 21:15:56 rcgood Exp $  #%^)
+
+(my $Pname = $0) =~ s+^.*/++;
+my $Usage = "Usage: $Pname <dir>";
+
+my ($dir) = @ARGV;
+$dir = '.'  unless defined $dir;
+
+
+use FileHandle;
+
+my $mufh = new FileHandle(">> $dir/memUsed");
+my $sufh = new FileHandle(">> $dir/swapUsed");
+
+die " !! $Pname: Can't open memUsed: $!\n"  unless defined $mufh;
+die " !! $Pname: Can't open swapUsed: $!\n"  unless defined $sufh;
+
+
+$mufh->autoflush(1);
+$sufh->autoflush(1);
+
+while(<STDIN>) {
+	chomp;
+	if($_ eq '') {
+		print $mufh "\n";
+		print $sufh "\n";
+		next;
+	}
+
+	my ($t, $mu, $su) = split /\s+/, $_;
+
+	printf $mufh "%s %s\n", $t, $mu;
+	printf $sufh "%s %s\n", $t, $su;
+}
+
+close $mufh;
+close $sufh;
+
+exit 0;

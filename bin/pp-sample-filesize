@@ -1,0 +1,75 @@
+#!/usr/bin/perl -w
+# ©2007,2009 isagn inc., all rights reserved. www.isagn.com
+# $Id: pp-sample-filesize,v 1.3 2009/04/25 05:13:51 rcgood Exp $  #%^)
+
+(my $Pname = $0) =~ s+^.*/++;
+my $Usage = "Usage: $Pname [-dir <path> | -halflifeS <n>] <target file> ...";
+
+use FileHandle;
+
+my ($dir, $halflife);
+
+
+while(@ARGV && $ARGV[0] =~ /^-/) {
+    my $arg = shift @ARGV;
+
+    if($arg eq '-dir') {
+		$dir = shift @ARGV;
+		if(! -d $dir) {
+			warn " !! $Pname: No directory '$dir'.\n";
+			die  " !! $Usage\n";
+		}
+	}
+	elsif($arg eq '-halflife') {
+		$halflife = shift @ARGV;
+		die " !! $Pname: halflife should be greater than zero!\n"
+			if !defined $halflife || $halflife <= 0;
+
+	}
+
+	else { die " !! $Usage\n" }
+}
+
+
+my @fileList = @ARGV;
+
+my $delay = 5;
+
+# Convert half life in s to exp decay constant.
+my $k = log(0.5) / $halflife
+	if defined $halflife;
+
+
+$| = 1;
+
+print "\n";
+
+for(;;) {
+	my $ttlSize = 0;
+
+	for my $file (@fileList) {
+		my @s = stat((defined $dir? "$dir/$file": $file));
+		next unless @s;
+
+		my $baseSize = $s[7];
+
+		if(defined $halflife) {
+			my $age   = time - $s[9];
+			$baseSize = $baseSize * exp($k * $age);
+		}
+
+		$ttlSize += $baseSize;
+	}
+
+
+	if(defined $halflife) {
+		printf "%d  %.6f\n", time, $ttlSize;
+	}
+	else {
+		printf "%d  %.0f\n", time, $ttlSize;
+	}
+
+	sleep $delay;
+}
+
+exit 0;

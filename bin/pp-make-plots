@@ -1,0 +1,1024 @@
+#!/usr/bin/perl -w
+# ©2007 isagn inc., all rights reserved. www.isagn.com
+# $Id: pp-make-plots,v 1.2 2008/11/07 17:51:05 xtext Exp $  #%^)
+
+(my $Pname = $0) =~ s+^.*/++;
+my $Usage = "Usage: $Pname -remHost <host> [-rawDataDir <dir>] [ -today | -hoursBack <nn> ] <dateStr>";
+
+use FileHandle;
+use Time::Local;
+
+my $rawDataDir = 'raw-data';
+my $configDir  = '.';
+my $outputDir  = '.';
+my $remHost;
+
+# Load in config.
+map { eval  "\$$_" } split /\n+/, `pp-config`;
+
+
+
+
+# Control on seekIndex debug verbosity.
+my $vv1 = 1;
+my $vv2 = 0;
+my $vv3 = 0;
+
+
+
+my ($earliestTime, $latestTime);
+my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst);
+
+my $dateStr;
+my $hoursBack;
+
+my $dbmIsOpen = 0;
+
+
+my $now = time;
+
+my @startTime = gmtime($now);
+
+
+
+my $ShowVariableTimeInterval = 0;
+
+
+# These are made package variables so they can be modified from the plot config.
+$LivePlotReloadTime       = 10;
+
+$DefaultHoursBack         = 2.0;
+$DefaultPlotTopValue      = 12;
+
+$PlotPixelWidth_Live      = 1100;
+$PlotPixelHeight_Live     = 800;
+$MinutesPerTic_Live       = 5;
+
+$PlotPixelWidth_Reg       = 1000;
+$PlotPixelHeight_Reg      = 900;
+$MinutesPerTic_Reg        = 3*60;
+
+$PlotPixelWidth_Wide      = 12*1440;
+$PlotPixelHeight_Wide     = 900;
+$MinutesPerTic_Wide       = 1*60;
+
+$TimeGap       = 10*60;
+$IndexTimeSpan =  2*60;
+
+%useLogScale = ( );
+
+$cycleTrackingParam = '';
+
+
+
+
+
+
+#-----------------------------------------------------------------------------------------
+
+while(@ARGV && $ARGV[0] =~ /^-/) {
+	my $arg = shift @ARGV;
+
+	if($arg eq '-hoursBack') {
+		$hoursBack = shift @ARGV;
+		die " !! $Usage\n" unless defined $hoursBack && $hoursBack >= 0;
+
+		$hoursBack = - $DefaultHoursBack
+			unless defined $hoursBack && $hoursBack > 0;
+
+		if($hoursBack < 0) {
+			$hoursBack = -$hoursBack;
+			$ShowVariableTimeInterval = 1;
+		}
+
+
+		$latestTime   = $now;
+		$earliestTime = $now - $hoursBack * 3600;
+	}
+
+	elsif($arg eq '-today') {
+		my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = @startTime;
+		unshift @ARGV, sprintf "%4d-%02d-%02d", $year+1900, $mon+1, $mday;
+	}
+	elsif($arg eq '-remHost') {
+		$remHost = shift @ARGV;
+	}
+	elsif($arg eq '-reload') {
+		$LivePlotReloadTime = shift @ARGV;
+	}
+	elsif($arg eq '-rawDataDir') {
+		$rawDataDir = shift @ARGV;
+		unless(-d $rawDataDir) {
+			warn " !! $Pname: No rawDataDir directory '$rawDataDir'\n";
+			die  " !! $Usage\n";
+		}
+	}
+	elsif($arg eq '-configDir') {
+		$configDir = shift @ARGV;
+		unless(-d $configDir) {
+			warn " !! $Pname: No rawDataDir directory '$configDir'\n";
+			die  " !! $Usage\n";
+		}
+	}
+	elsif($arg eq '-outputDir') {
+		$outputDir = shift @ARGV;
+		unless(-d $outputDir) {
+			warn " !! $Pname: No outputDir directory '$outputDir'\n";
+			die  " !! $Usage\n";
+		}
+	}
+
+	else { die " !! $Usage\n" }
+}
+
+if(@ARGV && $ARGV[0] =~ /^(\d{4})-(\d{2})-(\d{2})$/) {
+	($year, $mon, $mday) = ($1, $2, $3);
+
+	$year -= 1900;
+	$mon  -= 1;
+
+	$dateStr = sprintf "%4d-%02d-%02d", $year+1900, $mon+1, $mday;
+
+}
+
+else {
+	($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = @startTime;
+}
+
+
+
+die " !! $Usage\n"  unless defined $remHost;
+
+
+
+#-----------------------------------------------------------------------------------------
+
+
+my $tStart = timegm(0, 0, 0, $mday, $mon, $year);
+my $tDiv   = 60 * 60;
+my $vDiv   = 1_000_000;
+
+$earliestTime = $tStart                   unless defined $earliestTime;
+$latestTime   = $earliestTime + 24*60*60  unless defined $latestTime;
+
+
+my %scaleByFileName  = ( );
+my %offsetByFileName = ( );
+
+sub
+getPlotFileName {
+	my ($base, $isRate, $scale, $offset, $isTemp) = @_;
+	my $isTemp0 = defined $isTemp? $isTemp: '<undef>';
+	# print STDERR " >> getPlotFileName($base, $isRate, $scale, $offset, $isTemp0)\n";
+
+	die " BREAK " unless defined $scale & defined $offset;
+
+
+	if($isRate) { $isRate = '  rate' }
+	else        { $isRate = ''       }
+
+	# print STDERR " -- $Pname: scale: '$scale'\n";
+
+	$scale = (defined $scale && $scale)? sprintf("%.0f", $vDiv / $scale): 0;
+
+	$offset = sprintf "%+d", $offset;
+	$offset = ' 0' if $offset eq '+0';
+
+	my $fileName = sprintf '%-34s %11s  %s', "$base$isRate", $scale, $offset;
+
+	$fileName .= ".$$"  if defined $isTemp && $isTemp;
+
+	# print STDERR " -- $Pname: fileName: '$fileName'\n";
+
+	return $fileName;
+}
+
+
+#-----------------------------------------------------------------------------------------
+
+my $maxOfAllValues = 0;
+
+my $doWriteDatFile = 1;
+
+my @plotParamsList  = ( );
+
+my %seekIndex = ( );
+
+my @unlinkList = ( );
+
+my $lastTimeToRecord;
+
+
+sub
+getSeekIndexKey {
+	my ($file, $t) = @_;
+	my $t0 = $t;  $t0 = '<undef>'  unless defined $t;
+
+	# $vv1 && print STDERR " >> getSeekIndexKey($file,  $t0)\n";
+
+	if(defined $t) { $t = sprintf "et:%d", int($t/$IndexTimeSpan) }
+	else           { $t = 'last'                                  }
+
+	return sprintf "%s:%s", $file, $t;
+}
+
+sub
+writeToSeekIndex {
+	my ($file, $t, $val) = @_;
+
+    my $key = getSeekIndexKey $file, $t;
+
+    $vv2 && print STDERR " -- $Pname: Writing to seekIndex: '$key' => $val.\r";
+
+	return $seekIndex{$key} = $val;
+}
+
+sub
+readFromSeekIndex {
+	my ($file, $t) = @_;
+
+    my $key = getSeekIndexKey $file, $t;
+
+	# select undef, undef, undef, 0.1;
+
+	if(exists $seekIndex{$key}) {
+		my $val = $seekIndex{$key};
+		$vv2 && print STDERR " -- $Pname: Read from seekIndex: '$key' => $val.\r";
+		return $val;
+	}
+
+	$vv2 && print STDERR " -- $Pname: Read from seekIndex: '$key' not found.\r";
+
+	return;
+}
+
+
+sub
+genDatAndDeriv {
+	my ($file, $param1, $param0) = @_;
+	my ($f1, $offset1, $colour1) = @$param1;
+	my ($f0, $offset0, $colour0) = @$param0;
+
+	$vv2 && print STDERR " => $Pname: $file\n";
+
+	my $outFile = $file;
+
+	my $tmpDir = "/dev/shm/.$Pname";
+
+	if(defined $dateStr) {
+		mkdir "$outputDir/$remHost/$dateStr", 0755  if ! -d "$outputDir/$remHost/$dateStr";
+
+		$outFile = "$dateStr/$outFile"  if $dateStr ne '';
+	}
+	elsif(defined $hoursBack) {
+	   	if(0 || ! -w "/dev/shm") {
+			mkdir "$outputDir/$remHost/live", 0755  if ! -d "$outputDir/$remHost/live";
+		}
+		else {
+			use File::Path;
+			mkpath "$tmpDir/$remHost/live", 0755  if ! -d "$tmpDir/$remHost/live";
+			if(! -l "$outputDir/$remHost/live") {
+				if(-d "$outputDir/$remHost/live") {
+					my $ts = sprintf "%010d", time;
+					rename "$outputDir/$remHost/live", "$outputDir/$remHost/live-$ts";
+				}
+				symlink "$tmpDir/$remHost/live", "$outputDir/$remHost/live";
+			}
+		}
+
+
+		$outFile = "live/$outFile";
+	}
+
+
+	unshift @$param1, 1;
+	unshift @$param1, $outFile;
+
+	unshift @$param0, 0;
+	unshift @$param0, $outFile;
+
+	push @plotParamsList, $param1, $param0;
+
+
+	return  unless $doWriteDatFile;
+
+
+	#-----------------------------------------------------------------------------------------
+
+	my ($t0, $t1, $v0, $v1);
+
+	$f0      = 1 unless defined $f0;
+	$offset0 = 0 unless defined $offset0;
+	$offset1 = 0 unless defined $offset1;
+
+
+
+	# my $f00 = $f0? sprintf("%.0f", $vDiv / $f0): 0;
+	# my $f10 = $f1? sprintf("%.0f", $vDiv / $f1): 0;
+
+	# my $offset00 = sprintf "%+d", $offset0;
+	# my $offset10 = sprintf "%+d", $offset1;
+
+	# print STDERR " -- $Pname: outFile: '$outFile'\n";
+
+	$scaleByFileName{"$outFile"}    = $f0;
+	$scaleByFileName{"$outFile-d1"} = $f1;
+
+	$offsetByFileName{"$outFile"}    = $offset0;
+	$offsetByFileName{"$outFile-d1"} = $offset1;
+
+
+	my $o0FileNameTmp = getPlotFileName($outFile, 0, $f0, $offset0, 1);
+	my $o1FileNameTmp = getPlotFileName($outFile, 1, $f1, $offset1, 1);
+
+
+	my $filePos = 0;
+
+	my $rawFilePath = "$rawDataDir/$remHost/$file";
+
+	my $ifh  = new FileHandle("< $rawFilePath");
+	die " !! $Pname: Can't open raw data file '$rawFilePath': $!\n"
+		unless defined $ifh;
+
+	my $o0fh = new FileHandle("> $outputDir/$remHost/$o0FileNameTmp");
+	my $o1fh = new FileHandle("> $outputDir/$remHost/$o1FileNameTmp");
+
+	die " !! $Pname: Can't open o0 file '$outputDir/$remHost/$o0FileNameTmp': $!\n"  unless defined $o0fh;
+	die " !! $Pname: Can't open o1 file '$outputDir/$remHost/$o1FileNameTmp': $!\n"  unless defined $o1fh;
+
+
+
+
+	my ($pos, $lookBackTime);
+
+	my $lastTimeStamp = readFromSeekIndex $file;
+
+	$vv2 && print STDERR " -- $Pname: lastTimeStamp: '$lastTimeStamp', earliestTime: $earliestTime.\n";
+
+
+	if(defined $lastTimeStamp  && $lastTimeStamp < $earliestTime) {
+		# Data file ends before reporting period begins or 'last' is old.
+		# Seek to corresponding position in file.
+
+		$filePos = $pos = readFromSeekIndex $file, $lastTimeStamp;
+
+		$vv2 && print STDERR " -- $Pname: Read from seekIndex: '%s', %s => %s..\n", $file, $lastTimeStamp, $filePos;
+
+		seek $ifh, $pos, 0;
+		$vv2 && print STDERR " -- $Pname: seek($pos)\n";
+	}
+	else {
+		# Find offset of latest time earlier than target.
+
+		$pos = readFromSeekIndex $file, $earliestTime;
+
+		# if(exists $seekIndex{$key})
+		if(defined $pos)
+		{
+                # $filePos = $pos = $seekIndex{$key};
+
+                $filePos = $pos;
+                ## $vv2 && print STDERR " -- $Pname: Read from seekIndex: '$key' => $filePos.\n";
+
+ 				seek $ifh, $pos, 0;
+				$vv2 && print STDERR " -- $Pname: seek($pos)\n";
+		}
+		else {
+			# Look back some time to pick up a position before earliest time.
+
+			$lookBackTime = $earliestTime-144*$TimeGap;
+
+			my $n = 0;
+			for(my $t=int($earliestTime/$IndexTimeSpan); $t>=int($lookBackTime/$IndexTimeSpan); --$t) {
+				++$n;
+
+				$pos = readFromSeekIndex $file, $t * $IndexTimeSpan;
+
+				# if(exists $seekIndex{$key})
+				if(defined $pos)
+				{
+					# $filePos = $pos = $seekIndex{$key};
+
+					$filePos = $pos;
+					$vv2 && printf STDERR " -- $Pname: Read (%d times) from seekIndex: '%s', %s => %s.\n", $n, $file, $t, $filePos;
+
+					seek $ifh, $pos, 0;
+					$vv2 && print STDERR " -- $Pname: seek($pos)\n";
+
+					writeToSeekIndex $file, $earliestTime, $filePos;
+
+					last;
+				}
+			}
+
+			# Didn't find it.
+		}
+	}
+
+	# If $pos is undefined here it means that we didn't find an offset
+	# close to our earliest time to report, so we need to read from the start.
+
+	unless(defined $pos) {
+		writeToSeekIndex $file, $lookBackTime, 0;
+
+		$vv1 && print STDERR " !! $Pname: Didn't find file offset ($file, $lookBackTime). Reading from the start of the file...\n";
+
+		# die " BREAK ";
+	}
+
+
+
+
+	my $lastTimeIndex;
+
+	# A cycle starts when log-process-cpu stops being zero.
+	# Record the start times and plot from the start of the second last cycle.
+	my $cycleState = '';
+	my @cycleStartTimeList = ( );
+
+
+	while(<$ifh>) {
+		($t, $v) = split;
+
+		unless($t) {
+			print $o0fh "\n";
+			print $o1fh "\n";
+			$filePos += length($_);
+			next;
+		}
+
+		next if $t eq '' || $v eq '';
+
+
+		if(!defined $lastTimeIndex || $lastTimeIndex + $TimeGap <= $t) {
+
+			if(!defined $pos) {
+				writeToSeekIndex $file, $t, $filePos;
+				$lastTimeIndex = $t;
+			}
+		}
+
+		$filePos += length($_);
+
+		# next if $t < $earliestTime;
+		last if $t > $latestTime;
+
+
+		$lastTimeToRecord = $t;
+
+		$tStart = $t  unless defined $tStart;
+		$t -= $tStart;
+
+		my $vv = $v;
+		if(exists $useLogScale{$file} && $useLogScale{$file}) {
+			if($vv > 0) { $vv = log($vv)/log(10) }
+			else        { $vv = 0                }
+		}
+
+		# if($vv3) { map { printf STDERR " -- $Pname: useLogScale: '%s' => '%s'\n", $_, $useLogScale{$_} } keys %useLogScale }
+
+		my $vvv = ($offset0 * $vDiv + $f0 * $vv)/$vDiv;
+
+		if($maxOfAllValues < $vvv) { $maxOfAllValues = $vvv }
+
+		printf $o0fh "%f  %f\n", $t /$tDiv, $vvv;
+
+
+		($t0, $v0) = ($t1, $v1);
+		($t1, $v1) = ($t,  $v);
+
+		next  unless defined $t0 && defined $v0;
+
+		my $d = eval { ($v1-$v0)/($t1-$t0) };  $d = 0  unless defined $d;
+
+		my $dd = $d;
+		if(exists $useLogScale{$file} && $useLogScale{$file}) {
+			if($dd > 0) { $dd = log $dd }
+			else        { $dd = 0       }
+		}
+
+		printf $o1fh "%f  %f\n", $t1/$tDiv, ($offset1 * $vDiv + $f1 * $dd)/$vDiv;
+
+
+		if($file eq $cycleTrackingParam) {
+			# By tracking $v and $d for this param determine when a cycle starts and records the time somewhere.
+			if($d < 0 && $cycleState ne 'ended') {
+				$cycleState = 'ended';
+				# print STDERR " -- $Pname: cycle ended at $t (d $d) \n";
+			}
+			elsif($d > 0 && $cycleState ne 'started') {
+				$cycleState = 'started';
+				# print STDERR " -- $Pname: cycle started at $t (d $d) \n";
+				push @cycleStartTimeList, $t+$tStart;
+			}
+			else {
+			}
+		}
+
+	}
+
+	if(defined $lastTimeToRecord) {
+
+		if(1 || defined $hoursBack) { # Should only do this for the live plot.
+			writeToSeekIndex $file, undef, $lastTimeToRecord;
+		}
+
+		writeToSeekIndex $file, $lastTimeToRecord, $filePos;
+	}
+
+
+	close $ifh;
+	close $o0fh;
+	close $o1fh;
+
+
+	my $o0FileName = getPlotFileName($outFile, 0, $f0, $offset0);
+	my $o1FileName = getPlotFileName($outFile, 1, $f1, $offset1);
+
+
+	rename "$outputDir/$remHost/$o0FileNameTmp", "$outputDir/$remHost/$o0FileName";
+	rename "$outputDir/$remHost/$o1FileNameTmp", "$outputDir/$remHost/$o1FileName";
+
+
+	push @unlinkList, "$outputDir/$remHost/$o0FileName", "$outputDir/$remHost/$o1FileName";
+
+	if($ShowVariableTimeInterval && $cycleTrackingParam ne '') {
+		my $t1 = pop @cycleStartTimeList;
+
+		if(defined $t1 && $t1 > 0) {
+			my $t0 = pop @cycleStartTimeList;
+			# $t0 = pop @cycleStartTimeList;
+			$t0 = $t1 unless defined $t0 && $t0 > 0;
+
+			$hoursBack = ( time - $t0 ) / 3600;
+
+			  print STDERR " -- $Pname: ($t0 $t1) setting hoursBack to $hoursBack\n";
+		}
+	}
+
+	return;
+}
+
+
+
+
+
+#-----------------------------------------------------------------------------------------
+
+my $lock = "/tmp/.$Pname.$remHost.lock";
+
+# print STDERR " -- $Pname: "Getting lock...\n";
+until(symlink("$Pname.$$", $lock)) {
+	my $str = readlink $lock;
+	$str =~ /(\d+)$/;
+	my $pid = $1;
+	
+	if(-d "/proc/$pid/") {
+		print STDERR " -- $Pname: Trying again for a lock (pid $pid holding it)...\n";
+		sleep 1;
+	}
+	else {
+		print STDERR " -- $Pname: Removing stale lock...\n";
+		unlink $lock;
+	}
+}
+# print STDERR " -- $Pname: "Got lock.\n";
+
+
+$doWriteDatFile = 1;
+
+#-------------------
+dbmopen %seekIndex, "$rawDataDir/$remHost/seekIndex", 0666;
+require "$configDir/$remHost/plotConfig";
+dbmclose %seekIndex;
+#-------------------
+
+# print STDERR " -- $Pname: "Releasing lock.\n";
+unlink $lock;
+# print STDERR " -- $Pname: "Released lock.\n";
+
+
+
+#-----------------------------------------------------------------------------------------
+my @days = ( 31, 28, 31,  30, 31, 30,  31, 31, 30,  31, 30, 31 );
+
+sub
+daysInMonth {
+	my ($mon, $year) = @_;
+
+	my $d = $days[$mon-1];
+
+	if($mon == 2 && $year % 4 == 0 && $year % 400 != 0) { ++$d }
+
+	return $d;
+}
+#-----------------------------------------------------------------------------------------
+
+
+
+# Put plot files in the specified order.
+@plotParamsList   = grep { $_->[5] } sort { $a->[5] <=> $b->[5] } @plotParamsList;
+
+# Get a list of files and colours in that order.
+my @plotFileList    = map { $_->[0] } @plotParamsList;
+my @plotIsRateList  = map { $_->[1] } @plotParamsList;
+my $plotColourStr   = join(' ', map { $_->[4] } @plotParamsList );
+
+
+my $plotOutputFileNameBase = $remHost;
+my $plotOutputFileName     = $plotOutputFileNameBase;
+
+$plotOutputFileName = "$plotOutputFileName-$dateStr"  if defined $dateStr && $dateStr ne '';
+
+
+# print STDERR " -- $Pname:   plotFileList: ",  join(', ', @plotFileList), "\n";
+# print STDERR " -- $Pname: plotIsRateList: ",  join(', ', @plotIsRateList), "\n";
+
+
+sub
+secToHHMMSS {
+    my ($t) = @_;
+    my $hh = int($t / 3600); $t -= 3600*$hh;
+    my $mm = int($t /  60 ); $t -=  60 *$mm;
+    my $ss = $t;
+
+    return sprintf "%d:%02d:%02d", $hh, $mm,$ss;
+}
+
+sub
+hoursToHHMM {
+    my ($h) = @_;
+	$h += 24 if $h < -1/60;
+	$h = int($h*3600 + 0.5);
+    my $hh = int($h / 3600); $h -= 3600*$hh;
+    my $mm = int($h /  60 ); $h -=  60 *$mm;
+
+    return sprintf "%d:%02d", $hh, $mm;
+}
+
+
+
+my $reloadTime = -1;
+$reloadTime = $LivePlotReloadTime  if defined $hoursBack;
+
+sub max { $_[0] > $_[1]? $_[0]: $_[1] }
+sub min { $_[0] < $_[1]? $_[0]: $_[1] }
+
+sub
+makePlot {
+	my ($type, $width, $height, $xtics, $xrange, $yrange) = @_;
+
+	$width  += 74;
+	$height += 36;
+
+	mkdir "$outputDir/$remHost/plots-$type", 0755  unless -d "$outputDir/$remHost/plots-$type";
+
+    my $minY = -3.1                                 * 1e6/$vDiv;
+    my $maxY = max($DefaultPlotTopValue, 1 * int($maxOfAllValues+1.1)) * 1e6/$vDiv;
+
+	$maxY = min($maxY, 15);
+
+	my $ytics = ($maxOfAllValues <= $DefaultPlotTopValue)? 1: '';
+
+	$xrange = [     0,    24 ]  unless defined $xrange;
+	$yrange = [ $minY, $maxY ]  unless defined $yrange;
+
+
+	my $xStart = $xtics * int($xrange->[0] / $xtics);
+	my @xticsLabels = ( );
+	for(my $h=$xStart; $h<=$xrange->[1]; $h+=$xtics) {
+		push @xticsLabels, sprintf('"%s" %f', hoursToHHMM($h), $h);
+	}
+
+	if(1) { $xtics = '(' . join(', ', @xticsLabels) . ')' }
+
+
+
+	$xrange = @$xrange? join(':', @$xrange): '';
+	$yrange = @$yrange? join(':', @$yrange): '';
+
+	my $keyStr = '';
+
+	if($type eq 'reg' || $type eq 'wide') {
+		$keyStr = 'set key outside right box';    # 'outside' seems to be getting ignored...
+		$keyStr = 'set key outside below box';
+	}
+	elsif($type eq 'live') {
+		$keyStr = 'set key outside below box';	  # 'outside' works fine here...
+	}
+
+	#-----------------------------------------------------------------------------------------
+
+	my $gpPlotFile = "$outputDir/$remHost/plot-$type.gp";
+
+	unlink $gpPlotFile;
+
+	my $gpfh = new FileHandle("> $gpPlotFile");
+	die " !! $Pname: Can't open gp file '$gpPlotFile': $!\n"  unless defined $gpfh;
+
+	print $gpfh <<FINI;
+# ©2007 isagn inc., all rights reserved. www.isagn.com
+# This is a generated file.  Changes here will likely be lost...
+
+# From gnuplot: `help terminal -> gif'
+#                      The background color is set first, then the border
+# colors, then the X & Y axis colors, then the plotting colors.  The maximum
+# number of colors that can be set is 256.
+
+# 1 background
+# 2 border
+# 3 X & Yaxis
+# 4 plotting
+
+$keyStr
+
+set terminal gif \\
+	small size $width,$height \\
+	x000000 xc0c0c0 x808080  \\
+	$plotColourStr
+
+set output 'plots-$type/$plotOutputFileName.tmp'
+
+set xtics $xtics
+set ytics $ytics
+set grid
+
+FINI
+
+
+	my @expendableRateList = @plotIsRateList;
+
+
+	printf $gpfh "plot [$xrange][$yrange] ";
+	print  $gpfh " \\\n  ", join(", \\\n  ", grep { $_ ne '' } map {
+
+		my $isRate = shift @expendableRateList;
+		my $fn     = $isRate? "$_-d1": $_;
+
+		my $scale  = $scaleByFileName{$fn};
+		my $offset = $offsetByFileName{$fn};
+
+
+		# print STDERR " -- $Pname: scale  keys: ", join("\n", sort keys %scaleByFileName), "\n";
+		# print STDERR " -- $Pname: offset keys: ", join("\n", sort keys %offsetByFileName), "\n";
+		# print STDERR " -- $Pname: fn: '$fn', isRate: '$isRate', scale: '$scale', offset: '$offset'\n";
+
+		my $pf = getPlotFileName($_, $isRate, $scale, $offset);
+
+		# print STDERR " -- $Pname: plot file: '$pf'\n";  system "ls -l '$outputDir/$remHost/$pf'";
+
+		if((-s "$outputDir/$remHost/$pf") <= 1) { "'$pf' w d" }
+		else                                    { "'$pf' w l" }
+
+	} @plotFileList);
+
+	print  $gpfh "\n";
+
+	close $gpfh;
+
+
+	system "cd $outputDir/$remHost && gnuplot plot-$type.gp";
+
+
+
+
+	# Preserve access time of old plot image so our driver can tell if anyone is watching it.
+	my @s = stat "$outputDir/$remHost/plots-$type/$plotOutputFileName.gif";
+	my $savedATime = $s[8];
+
+	rename "$outputDir/$remHost/plots-$type/$plotOutputFileName.tmp",
+           "$outputDir/$remHost/plots-$type/$plotOutputFileName.gif";
+
+	@s = stat "$outputDir/$remHost/plots-$type/$plotOutputFileName.gif";
+	my $newMTime = $s[9];
+
+	utime $savedATime, $newMTime, "$outputDir/$remHost/plots-$type/$plotOutputFileName.gif"
+		if defined $savedATime && defined $newMTime;
+
+
+	#-----------------------------------------------------------------------------------------
+
+
+	sub _frob {
+		my ($offset, $fileName, $type) = @_;
+		# print STDERR " >> $Pname: "_frob($offset, $fileName, $type)\n";
+
+		my $label = '#%^)';
+
+		if($fileName =~ /(\d+)-(\d+)-(\d+)$/) {
+			my ($year, $mon, $day) = ($1, $2, $3); 
+
+
+			if($offset) {
+				$day += $offset;
+
+				# print STDERR " -- $Pname: fileName: '$fileName', day: '$day', mon: '$mon', year: '$year'\n";
+
+				if($day < 1) {
+					if(--$mon < 1) {
+						$mon = 12;
+						--$year;
+					}
+
+					$day = daysInMonth($mon, $year);
+				}
+				elsif($day > daysInMonth($mon, $year)) {
+					$day = 1;
+					if(++$mon > 12) {
+						$mon = 1;
+						++$year;
+					}	
+				}
+
+				$dateLabel = sprintf "%4d-%02d-%02d", $year, $mon, $day;
+
+				$fileName =~ s/\d+-\d+-\d+$/$dateLabel/;
+				$label = $dateLabel;
+			}
+			else {
+				if($type eq 'reg') {
+					$label = 'w i d e';
+					$fileName = "../plots-wide/$fileName";
+				}
+				elsif($type eq 'wide') {
+					$label = 'regular';
+					$fileName = "../plots-reg/$fileName";
+				}
+			}
+		}
+		else {
+			# print STDERR " !! $Pname: "No date seen in '$fileName'\n";
+		}
+
+		return ($fileName, $label);
+	};
+
+	# Fiddle with embedded date in file name to reference yesterday's and tomorrow's plot.
+	my ($prev, $prevLabel) = _frob -1, $plotOutputFileName, $type;
+	my ($alt,  $altLabel)  = _frob  0, $plotOutputFileName, $type;
+	my ($next, $nextLabel) = _frob +1, $plotOutputFileName, $type;
+
+	my ($back, $backLabel) = ("../", 'Back');
+	my ($live, $liveLabel) = ("../plots-live/$remHost", 'live');
+	my ($reg,  $regLabel)  = ("../plots-reg/$remHost",  'regular');
+	my ($wide, $wideLabel) = ("../plots-wide/$remHost", 'w i d e');
+
+	my ($ovH,  $ovHLabel)  = ("../overview-lr",         'horizontal');
+	my ($ovV,  $ovVLabel)  = ("../overview-tb",         'vertical');
+
+	my $linksStr = '';
+	# my $metaStr  = '';
+	my $jsString = '';
+
+	$dateStr = 'yyyy-mm-dd'  unless defined $dateStr;
+
+
+	if($reloadTime < 0) {
+						# "<a href='$back'> $backLabel </a>",
+		$linksStr = join(' -- ', (
+
+						"<a href='$prev.html'> $prevLabel &lt;- </a>",
+						$dateStr,
+						"<a href='$next.html'> -&gt; $nextLabel </a>",
+
+						"",
+
+                        "<a href='$live.html'>  $liveLabel  </a>",
+                        "<a href='$alt.html'>  $altLabel  </a>",
+						"Overview plots: <a href='$ovH.html'>$ovHLabel</a> / <a href='$ovV.html'>$ovVLabel</a>",
+					));
+
+	}
+	else {
+		$linksStr = join(' -- ', (
+						"Day plots: <a href='$reg.html'>$regLabel</a> / <a href='$wide.html'>$wideLabel</a>",
+						"Overview plots: <a href='$ovH.html'>$ovHLabel</a> / <a href='$ovV.html'>$ovVLabel</a>",
+					));
+
+					#	 "<a href='$back'> $backLabel </a>",
+					#	"Started: " .
+ 					#		# scalar(gmtime($now)) . " UTC",
+					#		sprintf("%4d-%02d-%02d %02d:%02d:%02d (%07.4f) UTC",
+					#			$year+1900, $mon+1, $mday,
+					#			$ hour, $min, $sec, 
+					#			$hour+$min/60+$sec/3600),
+
+		my $reloadTimems = $reloadTime * 1000;
+
+		$jsString = <<FINI;
+<script language="JavaScript">
+function reloadImage() {
+    var img = document.db_img;
+
+	if(!img) {
+		img = document.createElement ("img");
+		document.db_img = img;
+    }
+    
+    img.onload = function() {
+        var oldImg = document.images[0];
+        oldImg.parentNode.replaceChild(img, oldImg);
+		document.db_img = oldImg;
+    };
+    
+    var now = new Date();
+	var now = now.getTime();
+    var request = '$plotOutputFileName.gif?' + now;
+
+    img.setAttribute("src", request);
+    
+    setTimeout('reloadImage()', $reloadTimems);
+}
+
+reloadImage();
+</script>
+FINI
+	}
+
+	$linksStr = "<font size='-1'>$linksStr</font>";
+
+	my $metaReload = '';
+
+	if($reloadTime > 0) { 
+		# Uncomment this to cause underlying HTML to be reloaded every so often...
+		  $metaReload = sprintf '<meta http-equiv="refresh" content="%d; url=%s.html">', 100*$reloadTime, $plotOutputFileName;
+	}
+
+
+
+	my $type0 = $type;
+	$type0 = "$type0-$dateStr"  if defined $dateStr && $dateStr ne '';
+
+	#-----------------------------------------------------------------------------------------
+
+	unlink "$outputDir/$remHost/plots-$type/$plotOutputFileName.html.new";
+
+	my $htmlfh = new FileHandle("> $outputDir/$remHost/plots-$type/$plotOutputFileName.html.new");
+	die " !! $Pname: Can't open HTML file '$outputDir/$remHost/plots-$type/$plotOutputFileName.html.new': $!\n"  unless defined $htmlfh;
+
+	print $htmlfh <<FINI;
+<html>
+<head>
+<title> $plotOutputFileName -- performance plots </title>
+$metaReload
+</head>
+<body>
+
+<p>
+$linksStr <br/>
+<img name="plot" src="$plotOutputFileName.gif"> <br/>
+$linksStr
+</p>
+
+$jsString
+</body></html>
+FINI
+
+	close $htmlfh;
+
+	rename "$outputDir/$remHost/plots-$type/$plotOutputFileName.html.new",
+           "$outputDir/$remHost/plots-$type/$plotOutputFileName.html";
+
+	# Make a hard link to the most recently generated date, probably 'today'.
+	link   "$outputDir/$remHost/plots-$type/$plotOutputFileName.html",
+           "$outputDir/$remHost/plots-$type/$plotOutputFileNameBase.html.new";
+
+	rename "$outputDir/$remHost/plots-$type/$plotOutputFileNameBase.html.new",
+           "$outputDir/$remHost/plots-$type/$plotOutputFileNameBase.html";
+
+	return;
+}
+
+
+
+
+
+
+# A fudge factor to create a small gap (for better readability) between
+# the leading edge of a plot line and the right edge of the graph.
+my $f = 0.01;
+
+
+if(defined $hoursBack) {
+	$to   = $hour + $min/60 + $sec/3600  + $hoursBack * $f;
+	$from = $to - $hoursBack * (1 - 6*$f);
+
+	$xrange = [ $from, $to ];
+
+	makePlot 'live', $PlotPixelWidth_Live, $PlotPixelHeight_Live,  $MinutesPerTic_Live/60, $xrange;
+}
+
+elsif(defined $dateStr) {
+	print STDERR " -- $Pname: dateStr: '$dateStr'\n";
+
+	makePlot 'reg',  $PlotPixelWidth_Reg,  $PlotPixelHeight_Reg,  $MinutesPerTic_Reg/60;
+	makePlot 'wide', $PlotPixelWidth_Wide, $PlotPixelHeight_Wide, $MinutesPerTic_Wide/60;
+}
+
+
+
+my $n = unlink @unlinkList;
+# print STDERR " -- $Pname: n unlinked: $n\n";
+
+
+exit 0;

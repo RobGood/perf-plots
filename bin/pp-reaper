@@ -1,0 +1,90 @@
+#!/usr/bin/perl -w
+# ©2007 isagn inc., all rights reserved. www.isagn.com
+# $Id: pp-reaper,v 1.6 2007/11/19 03:19:41 rcgood Exp $  #%^)
+
+# This program terminates pp-sampler programs running uner the caller's userid.
+#
+# If called with option '-n' it shows what process would be killed,
+#   but doesn't kill any processes.
+#
+# If called with no arguments, it will kill off all processes with names
+#   beginning with 'pp-sampler' that don't look like names we specifically leave alone...
+#   e.g.  Running 'pp-reaper' will stop all this userid's running samplers.
+#
+# If called with a parameter name, it will restrict itself to just processes beginning
+#   with 'pp-sampler-<paramName>'.
+#
+# If called with a parameter name and one or more args, it will kill off only processes with
+# 'pp-sampler-<paramName> <arg> ...' 
+# 
+
+(my $Pname = $0) =~ s+^.*/++;
+my $Usage = "Usage: $Pname [<paramName> [<arg> ...]]";
+
+my $cmdPrefix = 'pp-sample';
+
+my $FakeIt  = 0;
+my $ForceIt = 0;
+
+if(@ARGV && $ARGV[0] eq '-n') { $FakeIt  = 1; shift }
+if(@ARGV && $ARGV[0] eq '-f') { $ForceIt = 1; shift }
+
+my $paramName = shift @ARGV;
+my @argList  = @ARGV;
+
+if(defined $paramName && $paramName ne '') {
+	if(@argList) {
+		$regExp = "$cmdPrefix-$paramName " . join(' ', @argList);
+	}
+	else {
+		$regExp = "$cmdPrefix-$paramName";
+	}
+}
+else {
+	$regExp = "$cmdPrefix";
+}
+
+my $regExp  = "[\\s/]$regExp";
+
+# print "regExp: m~$regExp~\n";
+
+my $cmd = 'ps xwww';
+
+
+use FileHandle;
+my $fh = new FileHandle("$cmd |");
+
+while(<$fh>) {
+	chomp;
+	next unless m~$regExp~;
+
+	# Ignore specific things that aren't samplers (but have appeared
+	# in ps output) and shouldn't be killed.
+	next if / ssh / || / exec / || / run-on-update / || /vi $cmdPrefix/;
+
+	# If there's a leading number, assume it's the pid.
+	next unless /^\s*(\d+) /;
+
+	push @killList, $1;
+	print " -- $Pname: $_\n";
+}
+
+close $fh;
+
+
+my $sig = $ForceIt ? 'KILL': 'INT';
+
+if(@killList) {
+	if($FakeIt) {
+		printf " ** $Pname: Faking it: kill -$sig %s\n", join(' ', @killList);
+	}
+	else {
+		printf " ** $Pname: Doing it: kill -$sig %s\n", join(' ', @killList);
+		kill $sig, @killList;
+	}
+}
+else {
+	printf " ** $Pname: No samplers to reap.\n";
+}
+
+exit 0;

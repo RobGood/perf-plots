@@ -1,0 +1,55 @@
+#!/usr/bin/perl -w
+# ©2007,2008 isagn inc., all rights reserved. www.isagn.com
+# $Id: pp-sample-meminfo,v 1.4 2008/02/06 20:03:30 rcgood Exp $  #%^)
+
+(my $Pname = $0) =~ s+^.*/++;
+my $Usage = "Usage: $Pname [<target intr src>]";
+
+use FileHandle;
+
+my ($target) = @ARGV;
+$target = 'eth0'  unless defined $target;
+
+my $delay = 5;
+
+
+$| = 1;
+
+print "\n";
+
+for(;;) {
+
+	my $str;
+
+	my ($memTTL, $memFree, $swapTTL, $swapFree);
+	my ($active, $inactive);
+
+	my $fh = new FileHandle("< /proc/meminfo");
+	while(<$fh>) {
+
+		if(/^MemTotal:\s+(\d+)/)  { $memTTL   = $1 }
+		if(/^MemFree:\s+(\d+)/)   { $memFree  = $1 }
+		if(/^SwapTotal:\s+(\d+)/) { $swapTTL  = $1 }
+		if(/^SwapFree:\s+(\d+)/)  { $swapFree = $1 }
+
+		if(/^Active:\s+(\d+)/)    { $active   = $1 }
+		if(/^Inactive:\s+(\d+)/)  { $inactive = $1 }
+ 
+	}
+	close $fh;
+
+	# my $memUsed = $memTTL - $memFree;
+	  my $memUsed = $active + $inactive;
+
+	my $memRatio  = eval {             $memUsed/$memTTL  };
+	my $swapRatio = eval { ($swapTTL-$swapFree)/$swapTTL };
+
+	$memRatio  = 0  unless defined $memRatio;
+	$swapRatio = 0  unless defined $swapRatio;
+
+	printf "%d  %f %f\n", time, $memRatio, $swapRatio;
+
+	sleep $delay;
+}
+
+exit 0;

@@ -1,0 +1,41 @@
+#!/usr/bin/perl -w
+# ©2007,2008 isagn inc., all rights reserved. www.isagn.com
+# $Id: pp-sample-nprocs,v 1.5 2008/02/06 19:05:32 rcgood Exp $  #%^)
+
+(my $Pname = $0) =~ s+^.*/++;
+my $Usage = "Usage: $Pname [<target fsys>]";
+
+use FileHandle;
+
+my ($target) = @ARGV;
+$target = ''  unless defined $target;
+
+my $delay = 4;
+
+
+
+$| = 1;
+
+print "\n";
+
+for(;;) {
+
+	my $dir;
+	my $nProcs = 0;
+
+	opendir DIR, '/proc';
+
+	while($dir = readdir DIR) {
+		next if $dir !~ /^[1-9]/;
+		++$nProcs;
+	}
+
+	closedir DIR;
+
+
+	printf "%d  %s\n", time, $nProcs;
+
+	sleep $delay;
+}
+
+exit 0;

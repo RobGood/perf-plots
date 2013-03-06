@@ -1,0 +1,19 @@
+# ©2007 isagn inc., all rights reserved. www.isagn.com
+
+remAccess="ssh localhost"
+
+doInit
+
+startSampler loadavg
+startSampler pid
+
+startXSampler netrtpb pp-sample-netrtpb eth0
+startXSampler uptimes
+startXSampler meminfo
+
+startSampler df pp-sample-df /
+startSampler nprocs
+
+startSampler intr-ide0  pp-sample-intr ide0
+startSampler intr-eth0  pp-sample-intr eth0
+

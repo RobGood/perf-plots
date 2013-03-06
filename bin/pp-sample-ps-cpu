@@ -1,0 +1,72 @@
+#!/usr/bin/perl -w
+# ©2007,2008 isagn inc., all rights reserved. www.isagn.com
+# $Id: pp-sample-nprocs,v 1.5 2008/02/06 19:05:32 rcgood Exp $  #%^)
+
+(my $Pname = $0) =~ s+^.*/++;
+my $Usage = "Usage: $Pname [<target proc>]";
+
+use FileHandle;
+
+my ($target) = @ARGV;
+$target = '.'  unless defined $target;
+
+my $delay = 4;
+
+
+
+$| = 1;
+
+print "\n";
+
+for(;;) {
+
+	my $dir;
+
+	opendir DIR, '/proc';
+
+
+	my $ttlCPU = 0;
+
+	while($dir = readdir DIR) {
+		next if $dir =~ /^\./;
+
+		my $fname = "/proc/$dir/cmdline";
+		next unless $dir =~ /^\d+$/ && -f $fname;
+
+		my $cmdline = '';
+
+		my $fh = new FileHandle("< $fname");
+		read $fh, $cmdline, 10240;
+		close $fh;
+
+		next if $cmdline eq '';
+
+		my @rec = split "\0", $cmdline;
+		next unless $rec[0] =~ /$target/;
+
+		# print " -- cmdline: ", join(" | ", @rec), "\n";
+
+		my $pstat = '';
+		$fh = new FileHandle("< /proc/$dir/stat");
+		read $fh, $pstat, 10240;
+		close $fh;
+
+
+		# print " -- pstat: '$pstat'\n";
+
+		my @pstatRec = split /\s+/, $pstat;
+		# my $i =0;  map { printf "%d:%s,", $i++, $_ } @pstatRec;
+		# printf "cpu: %d\n", $pstatRec[13];
+
+		$ttlCPU += $pstatRec[13] + $pstatRec[14] +$pstatRec[15] +$pstatRec[16];
+	}
+
+	closedir DIR;
+
+
+	printf "%d  %.2f\n", time, $ttlCPU/100;
+
+	sleep $delay;
+}
+
+exit 0;

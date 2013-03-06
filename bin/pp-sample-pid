@@ -1,0 +1,23 @@
+#!/usr/bin/perl -w
+# ©2007 isagn inc., all rights reserved. www.isagn.com
+# $Id: pp-sample-pid,v 1.2 2007/11/14 19:19:08 rcgood Exp $  #%^)
+
+(my $Pname = $0) =~ s+^.*/++;
+my $Usage = "Usage: $Pname";
+
+my $delay = 5;
+
+
+$| = 1;
+
+print "\n";
+
+for(;;) {
+	if(fork) { wait; sleep $delay; next }
+
+	printf "%d  %d\n", time, $$;
+
+	exit 0;
+}
+
+exit 0;

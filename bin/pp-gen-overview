@@ -1,0 +1,148 @@
+#!/bin/sh -e
+# ©2007 isagn inc., all rights reserved. www.isagn.com
+# $Id: pp-gen-overview,v 1.2 2008/11/20 18:19:07 xtext Exp $  #%^)
+
+Pname="`exec basename $0`"
+Usage="Usage: $Pname <remHost>"
+
+outputDir='.'
+
+eval `pp-config`
+
+renice +15 $$
+
+
+remHost="$1"
+if [ -z "$remHost" -o ! -d "$outputDir/$remHost" ]; then
+	echo " !! $Usage" 1>&2
+	exit 1
+fi
+
+cd $outputDir/$remHost
+
+
+
+NN=3
+
+rm -f plots-reg/*-th.gif-th.gif
+
+for f in `ls -t plots-reg/*.gif | head -$NN`; do
+	echo $f
+
+	if [ -s $f ]; then
+		giftopnm $f | pnmscale 0.15 > $f.ppm.$$
+		mv $f.ppm.$$ $f.ppm
+
+		ppmquant -fs 256 < $f.ppm  | ppmtogif > $f-th.gif.$$
+		mv $f-th.gif.$$ $f-th.gif
+	else
+		echo " !! $Pname: Empty GIF: '$f'" 1>&2
+		# rm -f $f $f.ppm
+	fi
+done
+
+
+# pnmcat -tb  plots-reg/*.ppm | ppmquant -fs 256 | ppmtogif > overview-tb.gif.$$
+# mv overview-tb.gif.$$ overview-tb.gif
+# 
+# pnmcat -lr  plots-reg/*.ppm | ppmquant -fs 256 | ppmtogif > overview-lr.gif.$$
+# mv overview-lr.gif.$$ overview-lr.gif
+
+rm -f plots-reg/*.ppm
+
+
+rm -f overview-lr.html
+
+(
+cat <<FINI
+<html>
+<head>
+<title>
+</title>
+</head>
+<body>
+
+<table cellpadding="0" cellspacing="0">
+<tr>
+FINI
+
+for f in plots-reg/*-th.gif; do
+	date=`echo $f | perl -nle '/(\d{4}-\d{2}-\d{2})/ && print $1'`
+	main=`echo $f | sed -e 's/\.gif.*$//'`
+
+	cat <<FINI
+<td>
+<a href="$main.html"><img border="0" src="$f"></a>
+</td>
+FINI
+done
+
+
+cat <<FINI
+</tr>
+<tr>
+FINI
+
+for f in plots-reg/*-th.gif; do
+	date=`echo $f | perl -nle '/(\d{4}-\d{2}-\d{2})/ && print $1'`
+	main=`echo $f | sed -e 's/\.gif.*$//'`
+
+	cat <<FINI
+<td align="center">
+<a href="$main.html"><b>$date</b></a>
+</td>
+FINI
+done
+
+cat <<FINI
+</tr>
+</table>
+
+</body>
+</html>
+FINI
+
+) > overview-lr.html
+
+
+
+
+
+rm -f overview-tb.html
+
+(
+cat <<FINI
+<html>
+<head>
+<title>
+</title>
+</head>
+<body>
+
+<table cellpadding="0" cellspacing="0">
+FINI
+
+for f in plots-reg/*-th.gif; do
+	date=`echo $f | perl -nle '/(\d{4}-\d{2}-\d{2})/ && print $1'`
+	main=`echo $f | sed -e 's/\.gif.*$//'`
+
+	cat <<FINI
+<tr>
+<td><a href="$main.html"><img border="0" src="$f"></a></td>
+<td valign="center"><a href="$main.html"><b>$date</b></a></td>
+</td>
+</tr>
+FINI
+done
+
+cat <<FINI
+</table>
+
+</body>
+</html>
+FINI
+
+) > overview-tb.html
+
+
+exit

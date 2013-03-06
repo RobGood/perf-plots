@@ -1,0 +1,20 @@
+#!/bin/sh -e
+# ©2007 isagn inc., all rights reserved. www.isagn.com
+# $Id: pp-config,v 1.5 2007/11/30 20:48:14 rcgood Exp $  #%^)
+
+Pname="`exec basename $0`"
+Usage="Usage: $Pname"
+
+hostName="`hostname`"
+hostConf="`which $Pname-$hostName 2>/dev/null || true`"
+
+if [ -z "$hostConf" ]; then
+	cat <<FINI
+rawDataDir='raw-data'
+outputDir='.'
+configDir='.'
+FINI
+	exit
+fi
+
+exec $hostConf

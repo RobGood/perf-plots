@@ -1,0 +1,80 @@
+#!/usr/bin/perl -w
+# ©2007 isagn inc., all rights reserved. www.isagn.com
+# $Id: pp-sample-intr,v 1.4 2007/11/14 19:37:04 rcgood Exp $  #%^)
+
+(my $Pname = $0) =~ s+^.*/++;
+my $Usage = "Usage: $Pname [<target intr src>]";
+
+use FileHandle;
+
+my ($target) = @ARGV;
+$target = 'eth0'  unless defined $target;
+
+my $delay = 5;
+
+
+$| = 1;
+
+print "\n";
+
+for(;;) {
+
+	#            CPU0       
+	#   0: 3446594523          XT-PIC  timer
+	#   1:       7376          XT-PIC  keyboard
+	#   2:          0          XT-PIC  cascade
+	#   5:          0          XT-PIC  ehci_hcd
+	#   8:          1          XT-PIC  rtc
+	#   9: 4144223599          XT-PIC  eth0, usb-uhci
+	#  10:       7317          XT-PIC  Intel ICH5, usb-uhci
+	#  11:          0          XT-PIC  usb-uhci, usb-uhci
+	#  12:     111104          XT-PIC  PS/2 Mouse
+	#  14:  447892904          XT-PIC  ide0
+	#  15: 2505842802          XT-PIC  ide1
+	# NMI:          0 
+	# ERR:          0
+
+	#            CPU0       CPU1       CPU2       CPU3       
+	#   0:        122          0          0  303575927    IO-APIC-edge  timer
+	#   1:          0          0          0          5    IO-APIC-edge  keyboard
+	#   2:          0          0          0          0          XT-PIC  cascade
+	#   8:          0          0          0          4    IO-APIC-edge  rtc
+	#  14:          0          0          1         10    IO-APIC-edge  ide0
+	#  34:          0          0          0         29   IO-APIC-level  ioc0
+	#  48:          0          0          0  421500971   IO-APIC-level  aacraid
+	#  53:          0          0          0  114329857   IO-APIC-level  eth0
+	# NMI:          0          0          0          0 
+	# LOC:  303589052  303589051  303589051  303589051 
+	# ERR:          0
+	# MIS:          0
+
+
+
+	my $str;
+	my $nIntr = 0;
+
+	my $fh = new FileHandle("< /proc/interrupts");
+	while(<$fh>) {
+		next unless /$target/;
+
+		chomp;  s/^\s+//;
+
+		my @s = split /\s+/;
+		shift @s;
+
+		while(@s) {
+			my $n = shift @s;
+			last unless $n =~ /^\d+$/;
+
+			$nIntr += $n;
+		}
+	}
+	close $fh;
+
+
+	printf "%d  %.0f\n", time, $nIntr;
+
+	sleep $delay;
+}
+
+exit 0;
