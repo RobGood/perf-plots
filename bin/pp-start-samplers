@@ -60,10 +60,10 @@ doInit() {
         file=`which pp-reaper`
         if [ $FakeIt = '0' ]; then
             # Stop all samplers.
-            cat $file | $remAccess perl -w -- -
+            cat $file | $remAccess perl -w -- - || true
         elif [ $FakeIt = '1' ]; then
             # Show running samplers.
-            cat $file | $remAccess perl -w -- - -n
+            cat $file | $remAccess perl -w -- - -n || true
         fi
     fi
 
@@ -84,6 +84,8 @@ startSampler() {
         shift 1
         args="$*"
 	fi
+
+echo " file: $file, cmd: $cmd"
 
 	if [ $EarlyExit = '0' ]; then
       if [ $FF_no_remote_install = old ]; then
@@ -121,6 +123,8 @@ startXSampler() {
         shift 1
         args="$*"
 	fi
+
+echo " file: $file, cmd: $cmd"
 
 	if [ $EarlyExit = '0' ]; then
       if [ $FF_no_remote_install = old ]; then
