@@ -85,8 +85,6 @@ startSampler() {
         args="$*"
 	fi
 
-echo " file: $file, cmd: $cmd"
-
 	if [ $EarlyExit = '0' ]; then
       if [ $FF_no_remote_install = old ]; then
 		if [ $FakeIt = '0' ]; then
@@ -123,8 +121,6 @@ startXSampler() {
         shift 1
         args="$*"
 	fi
-
-echo " file: $file, cmd: $cmd"
 
 	if [ $EarlyExit = '0' ]; then
       if [ $FF_no_remote_install = old ]; then
