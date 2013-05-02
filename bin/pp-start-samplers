@@ -12,7 +12,7 @@ EarlyExit='0'
 
 remAccess=''
 
-FF_no_remote_install=old
+FF_no_remote_install=new
 
 while [ $# -gt 0 ]; do
     case "$1" in
