@@ -56,7 +56,7 @@ my $fh = new FileHandle("$cmd |");
 
 while(<$fh>) {
 	chomp;
-	next unless m~$regExp~;
+	next unless m~$regExp~ || m~ perl -w -- -~;
 
 	# Ignore specific things that aren't samplers (but have appeared
 	# in ps output) and shouldn't be killed.

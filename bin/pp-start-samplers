@@ -48,15 +48,24 @@ doInit() {
 	if [ "$remAccess" != '' ]; then remAccess="$remAccess exec"; fi
 
 
-if [ $FF_no_remote_install = old ]; then
-	if [ $FakeIt = '0' ]; then
-		# Stop all samplers.
-		$remAccess pp-reaper
-	elif [ $FakeIt = '1' ]; then
-		# Show running samplers.
-		$remAccess pp-reaper -n
-	fi
-fi
+    if [ $FF_no_remote_install = old ]; then
+        if [ $FakeIt = '0' ]; then
+            # Stop all samplers.
+            $remAccess pp-reaper
+        elif [ $FakeIt = '1' ]; then
+            # Show running samplers.
+            $remAccess pp-reaper -n
+        fi
+    else
+        file=`which pp-reaper`
+        if [ $FakeIt = '0' ]; then
+            # Stop all samplers.
+            cat $file | $remAccess perl -w -- -
+        elif [ $FakeIt = '1' ]; then
+            # Show running samplers.
+            cat $file | $remAccess perl -w -- - -n
+        fi
+    fi
 
 	perl -e 'select undef, undef, undef, 0.25'
 }
