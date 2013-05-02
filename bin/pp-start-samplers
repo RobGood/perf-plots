@@ -67,8 +67,13 @@ startSampler() {
 
 	if [ -z "$*" ]; then
 		cmd="pp-sample-$rawFile"
+        file=`which $cmd`
+        args=''
 	else
 		cmd="$*"
+        file=`which $1`
+        shift 1
+        args="$*"
 	fi
 
 	if [ $EarlyExit = '0' ]; then
@@ -80,12 +85,11 @@ startSampler() {
 			echo " #% $remAccess $cmd < /dev/null >> $rawDataDir/$remHost/$rawFile &"
 		fi
       else
-        file=`which $cmd`
 		if [ $FakeIt = '0' ]; then
-            cat $file | $remAccess perl -w >> $rawDataDir/$remHost/$rawFile &
-			echo " %% cat $file | $remAccess perl -w >> $rawDataDir/$remHost/$rawFile &"
+            cat $file | $remAccess perl -w -- $args>> $rawDataDir/$remHost/$rawFile &
+			echo " %% cat $file | $remAccess perl -w -- $args >> $rawDataDir/$remHost/$rawFile &"
 		elif [ $FakeIt = '1' ]; then
-			echo " #% cat $file | $remAccess perl -w >> $rawDataDir/$remHost/$rawFile &"
+			echo " #% cat $file | $remAccess perl -w -- $args >> $rawDataDir/$remHost/$rawFile &"
 		fi
       fi
 	fi
@@ -99,9 +103,14 @@ startXSampler() {
 	shift
 
 	if [ -z "$*" ]; then
-		cmd="pp-sample-$demux"
+		cmd="pp-sample-$rawFile"
+        file=`which $cmd`
+        args=''
 	else
 		cmd="$*"
+        file=`which $1`
+        shift 1
+        args="$*"
 	fi
 
 	if [ $EarlyExit = '0' ]; then
@@ -113,12 +122,11 @@ startXSampler() {
 			echo " #% ($remAccess $cmd < /dev/null | pp-recv-$demux $rawDataDir/$remHost ) &"
 		fi
       else
-        file=`which $cmd`
 		if [ $FakeIt = '0' ]; then
-			(cat $file | $remAccess  perl -w | pp-recv-$demux $rawDataDir/$remHost ) 2>&1 | sed -e "s/^/$remHost: /"  &
-			echo " %% (cat $file | $remAccess perl -w | pp-recv-$demux $rawDataDir/$remHost ) &"
+			(cat $file | $remAccess  perl -w -- $args | pp-recv-$demux $rawDataDir/$remHost ) 2>&1 | sed -e "s/^/$remHost: /"  &
+			echo " %% (cat $file | $remAccess perl -w -- $args | pp-recv-$demux $rawDataDir/$remHost ) &"
 		elif [ $FakeIt = '1' ]; then
-			echo " #% (cat $file | $remAccess perl -w | pp-recv-$demux $rawDataDir/$remHost ) &"
+			echo " #% (cat $file | $remAccess perl -w -- $args | pp-recv-$demux $rawDataDir/$remHost ) &"
 		fi
       fi
 	fi
