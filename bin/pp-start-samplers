@@ -12,6 +12,7 @@ EarlyExit='0'
 
 remAccess=''
 
+FF_no_remote_install=old
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -47,6 +48,7 @@ doInit() {
 	if [ "$remAccess" != '' ]; then remAccess="$remAccess exec"; fi
 
 
+if [ $FF_no_remote_install = old ]; then
 	if [ $FakeIt = '0' ]; then
 		# Stop all samplers.
 		$remAccess pp-reaper
@@ -54,6 +56,7 @@ doInit() {
 		# Show running samplers.
 		$remAccess pp-reaper -n
 	fi
+fi
 
 	perl -e 'select undef, undef, undef, 0.25'
 }
@@ -69,12 +72,22 @@ startSampler() {
 	fi
 
 	if [ $EarlyExit = '0' ]; then
+      if [ $FF_no_remote_install = old ]; then
 		if [ $FakeIt = '0' ]; then
 			$remAccess $cmd < /dev/null >> $rawDataDir/$remHost/$rawFile &
 			echo " %% $remAccess $cmd < /dev/null >> $rawDataDir/$remHost/$rawFile &"
 		elif [ $FakeIt = '1' ]; then
 			echo " #% $remAccess $cmd < /dev/null >> $rawDataDir/$remHost/$rawFile &"
 		fi
+      else
+        file=`which $cmd`
+		if [ $FakeIt = '0' ]; then
+            cat $file | $remAccess perl -w < /dev/null >> $rawDataDir/$remHost/$rawFile &
+			echo " %% cat $file | $remAccess perl -w < /dev/null >> $rawDataDir/$remHost/$rawFile &"
+		elif [ $FakeIt = '1' ]; then
+			echo " #% cat $file | $remAccess perl -w < /dev/null >> $rawDataDir/$remHost/$rawFile &"
+		fi
+      fi
 	fi
 
 	perl -e 'select undef, undef, undef, 0.1'
@@ -92,12 +105,22 @@ startXSampler() {
 	fi
 
 	if [ $EarlyExit = '0' ]; then
+      if [ $FF_no_remote_install = old ]; then
 		if [ $FakeIt = '0' ]; then
 			($remAccess $cmd < /dev/null | pp-recv-$demux $rawDataDir/$remHost ) 2>&1 | sed -e "s/^/$remHost: /"  &
 			echo " %% ($remAccess $cmd < /dev/null | pp-recv-$demux $rawDataDir/$remHost ) &"
 		elif [ $FakeIt = '1' ]; then
 			echo " #% ($remAccess $cmd < /dev/null | pp-recv-$demux $rawDataDir/$remHost ) &"
 		fi
+      else
+        file=`which $cmd`
+		if [ $FakeIt = '0' ]; then
+			(cat $file | $remAccess  perl -w < /dev/null | pp-recv-$demux $rawDataDir/$remHost ) 2>&1 | sed -e "s/^/$remHost: /"  &
+			echo " %% (cat $file | $remAccess perl -w < /dev/null | pp-recv-$demux $rawDataDir/$remHost ) &"
+		elif [ $FakeIt = '1' ]; then
+			echo " #% (cat $file | $remAccess perl -w < /dev/null | pp-recv-$demux $rawDataDir/$remHost ) &"
+		fi
+      fi
 	fi
 
 	perl -e 'select undef, undef, undef, 0.1'
