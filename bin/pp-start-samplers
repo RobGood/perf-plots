@@ -82,10 +82,10 @@ startSampler() {
       else
         file=`which $cmd`
 		if [ $FakeIt = '0' ]; then
-            cat $file | $remAccess perl -w < /dev/null >> $rawDataDir/$remHost/$rawFile &
-			echo " %% cat $file | $remAccess perl -w < /dev/null >> $rawDataDir/$remHost/$rawFile &"
+            cat $file | $remAccess perl -w >> $rawDataDir/$remHost/$rawFile &
+			echo " %% cat $file | $remAccess perl -w >> $rawDataDir/$remHost/$rawFile &"
 		elif [ $FakeIt = '1' ]; then
-			echo " #% cat $file | $remAccess perl -w < /dev/null >> $rawDataDir/$remHost/$rawFile &"
+			echo " #% cat $file | $remAccess perl -w >> $rawDataDir/$remHost/$rawFile &"
 		fi
       fi
 	fi
@@ -115,10 +115,10 @@ startXSampler() {
       else
         file=`which $cmd`
 		if [ $FakeIt = '0' ]; then
-			(cat $file | $remAccess  perl -w < /dev/null | pp-recv-$demux $rawDataDir/$remHost ) 2>&1 | sed -e "s/^/$remHost: /"  &
-			echo " %% (cat $file | $remAccess perl -w < /dev/null | pp-recv-$demux $rawDataDir/$remHost ) &"
+			(cat $file | $remAccess  perl -w | pp-recv-$demux $rawDataDir/$remHost ) 2>&1 | sed -e "s/^/$remHost: /"  &
+			echo " %% (cat $file | $remAccess perl -w | pp-recv-$demux $rawDataDir/$remHost ) &"
 		elif [ $FakeIt = '1' ]; then
-			echo " #% (cat $file | $remAccess perl -w < /dev/null | pp-recv-$demux $rawDataDir/$remHost ) &"
+			echo " #% (cat $file | $remAccess perl -w | pp-recv-$demux $rawDataDir/$remHost ) &"
 		fi
       fi
 	fi
