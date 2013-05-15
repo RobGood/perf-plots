@@ -286,6 +286,7 @@ genDatAndDeriv {
 					my $ts = sprintf "%010d", time;
 					rename "$outputDir/$remHost/live", "$outputDir/$remHost/live-$ts";
 				}
+				mkpath "$outputDir/$remHost", 0755;
 				symlink "$tmpDir/$remHost/live", "$outputDir/$remHost/live";
 			}
 		}
