@@ -77,13 +77,14 @@ foregroundLiveUpdate {
 	my $liveImageFile = eval { my @s = glob "$pDir/*.gif";   shift @s };
 	my $liveHTMLFile  = eval { my @s = glob "$pDir/*.html";  shift @s };
 
-	if(! -s $liveImageFile) {
-		unlink $liveImageFile;
-		undef $liveImageFile;
-	}
+    if(defined $liveImageFile) {
+		if(! -s $liveImageFile) {
+			unlink $liveImageFile;
+			undef $liveImageFile;
+		}
 
-	$lastImageFetchTime = (stat $liveImageFile)[8]	 # access time.
-		if defined $liveImageFile;
+		$lastImageFetchTime = (stat $liveImageFile)[8];	 # access time.
+	}
 
 	if(! defined $lastImageFetchTime || $lastImageFetchTime + $LiveImageIdlePeriod > $now) {
 
