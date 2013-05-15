@@ -91,8 +91,11 @@ foregroundLiveUpdate {
 		# The image was fetched recently enough, so maybe we'll make a new one...
 
 		if($LiveImageIsIdle) {
+			my $lift = $lastImageFetchTime;
+			$lift = 0 unless defined $lift;
+
 			my $msg = sprintf "Last %s live image fetch %d s ago; starting live image production at %s.",
-					 $remHost, $now - $lastImageFetchTime, scalar(localtime($now));
+					 $remHost, $now - $lift, scalar(localtime($now));
 
 			print STDERR " ** $Pname: $msg\n";
 			$LiveImageIsIdle = 0;
