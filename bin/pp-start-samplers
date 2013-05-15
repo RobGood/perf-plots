@@ -112,7 +112,7 @@ startXSampler() {
 	shift
 
 	if [ -z "$*" ]; then
-		cmd="pp-sample-$rawFile"
+		cmd="pp-sample-$demux"
         file=`which $cmd`
         args=''
 	else
