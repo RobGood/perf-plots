@@ -50,8 +50,12 @@ $LivePlotReloadTime       = 10;
 $DefaultHoursBack         = 2.0;
 $DefaultPlotTopValue      = 12;
 
-$PlotPixelWidth_Live      = 1100;
-$PlotPixelHeight_Live     = 800;
+# $PlotPixelWidth_Live      = 1100;
+# $PlotPixelHeight_Live     = 800;
+
+$PlotPixelWidth_Live      = 1200-74;
+$PlotPixelHeight_Live     = 800-36;
+
 $MinutesPerTic_Live       = 5;
 
 $PlotPixelWidth_Reg       = 1000;
@@ -795,6 +799,8 @@ FINI
 	utime $savedATime, $newMTime, "$outputDir/$remHost/plots-$type/$plotOutputFileName.gif"
 		if defined $savedATime && defined $newMTime;
 
+    # unlink "$outputDir/$remHost/plots-$type/$plotOutputFileNameBase.gif";
+    link "$outputDir/$remHost/plots-$type/$plotOutputFileName.gif", "$outputDir/$remHost/plots-$type/$plotOutputFileNameBase.gif";
 
 	#-----------------------------------------------------------------------------------------
 
