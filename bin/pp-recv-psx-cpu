@@ -1,0 +1,46 @@
+#!/usr/bin/perl -w
+# $Id: pp-recv-netrtpb,v 1.8 2007/11/14 21:07:35 rcgood Exp $  #%^)
+
+(my $Pname = $0) =~ s+^.*/++;
+my $Usage = "Usage: $Pname <dir>";
+
+my ($dir) = @ARGV;
+$dir = '.'  unless defined $dir;
+
+
+use FileHandle;
+
+my $cpus_fh = new FileHandle(">> $dir/p-cpus");
+my $vmsz_fh = new FileHandle(">> $dir/p-vmsz");
+my $rss_fh  = new FileHandle(">> $dir/p-rss");
+
+die " !! $Pname: Can't open p-cpus: $!\n"  unless defined $cpus_fh;
+die " !! $Pname: Can't open p-vmsz: $!\n"  unless defined $vmsz_fh;
+die " !! $Pname: Can't open p-rss: $!\n"   unless defined $rss_fh;
+
+
+$cpus_fh->autoflush(1);
+$vmsz_fh->autoflush(1);
+$rss_fh->autoflush(1);
+
+while(<STDIN>) {
+	chomp;
+	if($_ eq '') {
+		print $cpus_fh "\n";
+		print $vmsz_fh "\n";
+		print $rss_fh "\n";
+		next;
+	}
+
+	my ($t, $cpus, $vmsz, $rss) = split /\s+/, $_;
+
+	printf $cpus_fh "%s %s\n", $t, $cpus;
+	printf $vmsz_fh "%s %s\n", $t, $vmsz;
+	printf $rss_fh "%s %s\n", $t, $rss;
+}
+
+close $cpus_fh;
+close $vmsz_fh;
+close $rss_fh;
+
+exit 0;
