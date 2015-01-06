@@ -1,12 +1,15 @@
-# ©2007 isagn inc., all rights reserved. www.isagn.com
 
-remAccess="ssh localhost"
+# Set this to an SSH commandline that invoke a shell or run commands on ${remHost}
+remAccess="ssh ${remHost}"
 
 doInit
+
+# startSampler <name> [ <cmd> <args> ]
 
 startSampler loadavg
 startSampler pid
 
+# Multiplexed samplers. Deprecated.
 startXSampler netrtpb pp-sample-netrtpb eth0
 startXSampler uptimes
 startXSampler meminfo
