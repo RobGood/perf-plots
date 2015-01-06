@@ -1,0 +1,20 @@
+#!/bin/sh -e
+
+Pname=`basename $0`
+Usage="$Pname <env>"
+
+env="$1"
+if [ -z "$env" ]; then
+	echo " !! $Usage" 1>& 2
+	exit 1
+fi
+
+htmlFile="/var/www/$env-perf-plots-live.html"
+if [ ! -f $htmlFile ]; then
+	echo " !! $Pname: No HTML file $htmlFile to get hostnames from..." 1>&2
+	exit 1
+fi
+
+perl -nle '/ title="(.*?)"/ && print $1' /var/www/$env-perf-plots-live.html | xargs -n 1  pp-start-samplers
+
+exit
