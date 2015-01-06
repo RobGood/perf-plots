@@ -9,6 +9,7 @@ eval `pp-config`
 
 FakeIt='0'
 EarlyExit='0'
+ForceIt='0'
 
 remAccess=''
 
@@ -22,6 +23,7 @@ while [ $# -gt 0 ]; do
 	-configDir)  configDir="$2"  ; shift 2 ;;
 	-n)          FakeIt='1'      ; shift   ;;
 	-x)          EarlyExit='1'   ; shift   ;;
+	-f)          ForceIt='1'     ; shift   ;;
 
 	*) break;;
     esac
@@ -54,16 +56,16 @@ doInit() {
             $remAccess pp-reaper
         elif [ $FakeIt = '1' ]; then
             # Show running samplers.
-            $remAccess pp-reaper -n
+            $remAccess pp-reaper -n -f
         fi
     else
         file=`which pp-reaper`
         if [ $FakeIt = '0' ]; then
             # Stop all samplers.
-            cat $file | $remAccess perl -w -- - || true
+            cat $file | $remAccess perl -W -- - || true
         elif [ $FakeIt = '1' ]; then
             # Show running samplers.
-            cat $file | $remAccess perl -w -- - -n || true
+            cat $file | $remAccess perl -W -- - -n -f || true
         fi
     fi
 
@@ -95,10 +97,10 @@ startSampler() {
 		fi
       else
 		if [ $FakeIt = '0' ]; then
-            cat $file | $remAccess perl -w -- - $args>> $rawDataDir/$remHost/$rawFile &
-			echo " %% cat $file | $remAccess perl -w -- - $args >> $rawDataDir/$remHost/$rawFile &"
+			cat $file | $remAccess perl -W -- - $args>> $rawDataDir/$remHost/$rawFile &
+			echo " %% cat $file | $remAccess perl -W -- - $args >> $rawDataDir/$remHost/$rawFile &"
 		elif [ $FakeIt = '1' ]; then
-			echo " #% cat $file | $remAccess perl -w -- - $args >> $rawDataDir/$remHost/$rawFile &"
+			echo " #% cat $file | $remAccess perl -W -- - $args >> $rawDataDir/$remHost/$rawFile &"
 		fi
       fi
 	fi
@@ -132,10 +134,10 @@ startXSampler() {
 		fi
       else
 		if [ $FakeIt = '0' ]; then
-			(cat $file | $remAccess  perl -w -- - $args | pp-recv-$demux $rawDataDir/$remHost ) 2>&1 | sed -e "s/^/$remHost: /"  &
-			echo " %% (cat $file | $remAccess perl -w -- - $args | pp-recv-$demux $rawDataDir/$remHost ) &"
+			(cat $file | $remAccess  perl -W -- - $args | pp-recv-$demux $rawDataDir/$remHost ) 2>&1 | sed -e "s/^/$remHost: /"  &
+			echo " %% (cat $file | $remAccess perl -W -- - $args | pp-recv-$demux $rawDataDir/$remHost ) &"
 		elif [ $FakeIt = '1' ]; then
-			echo " #% (cat $file | $remAccess perl -w -- - $args | pp-recv-$demux $rawDataDir/$remHost ) &"
+			echo " #% (cat $file | $remAccess perl -W -- - $args | pp-recv-$demux $rawDataDir/$remHost ) &"
 		fi
       fi
 	fi
@@ -146,6 +148,10 @@ startXSampler() {
 
 
 echo " -- $Pname: remHost: '$remHost'"
+
+if [ "$EarlyExit" = 0 ]; then
+	renice +3 $$ || true
+fi
 
 if [ "$remHost" = '-all' ]; then
 	hostList="`cd $configDir && ls */samplerConfig | sed -e 's/\/.*$//'`"
