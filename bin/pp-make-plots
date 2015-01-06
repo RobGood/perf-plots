@@ -684,7 +684,7 @@ makePlot {
 
 	$maxY = min($maxY, 15);
 
-	my $ytics = ($maxOfAllValues <= $DefaultPlotTopValue)? 1: '';
+	my $ytics = ($maxOfAllValues <= $DefaultPlotTopValue)? 1: '1';
 
 	$xrange = [     0,    24 ]  unless defined $xrange;
 	$yrange = [ $minY, $maxY ]  unless defined $yrange;
@@ -801,7 +801,7 @@ FINI
 	utime $savedATime, $newMTime, "$outputDir/$remHost/plots-$type/$plotOutputFileName.gif"
 		if defined $savedATime && defined $newMTime;
 
-    # unlink "$outputDir/$remHost/plots-$type/$plotOutputFileNameBase.gif";
+    if($type eq 'reg') {  unlink "$outputDir/$remHost/plots-$type/$plotOutputFileNameBase.gif" }
     link "$outputDir/$remHost/plots-$type/$plotOutputFileName.gif", "$outputDir/$remHost/plots-$type/$plotOutputFileNameBase.gif";
 
 	#-----------------------------------------------------------------------------------------
