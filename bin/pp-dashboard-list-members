@@ -1,0 +1,14 @@
+#!/bin/sh -e
+
+Usage="Usage: $Pname <env>"
+
+env="$1"
+
+if [ -z "$env" ]; then 
+	echo " !! $Usage" 1>&2
+	exit 1
+fi
+
+perl -nle '/ title="(.+?)"/ && print $1' /var/www/$env-perf-plots-live.html
+
+exit 0
