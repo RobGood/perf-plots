@@ -1,8 +1,10 @@
-# ©2007 isagn inc., all rights reserved. www.isagn.com
 
 # $MinutesPerTic_Live = 1;
 
 map { $useLogScale{$_} = 1 } qw ( upTime );
+
+# genDatAndDeriv <Sample Name>, <Sample Rate Plot Params>, <Sample Value Plot Params>
+# genDatAndDeriv '<sample-name>', [ <scale>, <Y axis>, <rgb>, <level> ], [ <scale>, <Y axis>, <rgb>, <level> ];
 
 genDatAndDeriv 'loadavg',          [          000,    -2, 'x202020',    0 ],   [ 200_000,     4, 'xf08080',  1200 ];
 genDatAndDeriv 'pid',              [        5_000,     1, 'xc0c060',  1100 ],   [     100,     0, 'x202020',    10 ];
@@ -23,4 +25,5 @@ genDatAndDeriv 'net-tp',           [      50,      3, 'x40a0c0',   202 ],   [   
 genDatAndDeriv 'net-rb',           [      30,      6, 'x60c0a0',   210 ],   [ 2500/1048576,     6, 'x602020',     1 ];
 genDatAndDeriv 'net-tb',           [      30,      7, 'x60a0a0',   210 ],   [ 2500/1048576,     7, 'x602020',     1 ];
 
+# !0
 1;
