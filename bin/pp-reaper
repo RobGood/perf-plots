@@ -48,25 +48,33 @@ my $regExp  = "[\\s/]$regExp";
 
 # print "regExp: m~$regExp~\n";
 
-my $cmd = 'ps xwww';
+my $cmd = '/bin/ps xwww';
 
 
 use FileHandle;
-my $fh = new FileHandle("$cmd |");
+my $fh = eval { new FileHandle("$cmd |") };
+die " !! Can't get filehandle: $!\n"
+  unless defined $fh;
 
 while(<$fh>) {
 	chomp;
-	next unless m~$regExp~ || m~ perl -w -- -~;
+# print STDERR " 1\n";
+	next unless m~ perl -[wW] -- -~ || m~$regExp~;
 
 	# Ignore specific things that aren't samplers (but have appeared
 	# in ps output) and shouldn't be killed.
+# print STDERR " 2\n";
 	next if / ssh / || / exec / || / run-on-update / || /vi $cmdPrefix/;
 
 	# If there's a leading number, assume it's the pid.
+# print STDERR " 3\n";
 	next unless /^\s*(\d+) /;
 
+	# Don't kill ourselves.
+	next if $1 == $$;
+
 	push @killList, $1;
-	print " -- $Pname: $_\n";
+	print STDERR " -- $Pname: ($1)  $_\n";
 }
 
 close $fh;
@@ -76,10 +84,10 @@ my $sig = $ForceIt ? 'KILL': 'INT';
 
 if(@killList) {
 	if($FakeIt) {
-		printf " ** $Pname: Faking it: kill -$sig %s\n", join(' ', @killList);
+		printf STDERR " ** $Pname: Faking it: kill -$sig %s\n", join(' ', @killList);
 	}
 	else {
-		printf " ** $Pname: Doing it: kill -$sig %s\n", join(' ', @killList);
+		printf STDERR " ** $Pname: Doing it: kill -$sig %s\n", join(' ', @killList);
 		kill $sig, @killList;
 	}
 }
